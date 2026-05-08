@@ -1,0 +1,21 @@
+{# Floating switcher between the bundled demo themes. Included by every
+   layout-<theme>.html (NOT by the core layout). Hard-codes the four
+   bundled themes — keep in sync with config/routes.php and the set of
+   layout-<theme>.html files.
+
+   The URLs are constructed from the canonical route shape. Each demo
+   slug is published in English only, so when MULTI_LANG is true we
+   force `/en/` regardless of the visitor's current language — sending
+   them to a /de/demos/* URL would be a dead link. #}
+<aside class="theme-switcher" aria-label="WhimCMS demo themes">
+  <a class="theme-switcher-home" href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13 8H3"/><path d="M7 4 3 8l4 4"/></svg>
+    <span>WhimCMS</span>
+  </a>
+  <nav class="theme-switcher-nav" aria-label="Switch demo theme">
+    <a class="theme-switcher-link{% if: PAGE == 'demo-business' %} is-active{% endif %}" href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}demos/business">Business</a>
+    <a class="theme-switcher-link{% if: PAGE == 'demo-personal' %} is-active{% endif %}" href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}demos/personal">Personal</a>
+    <a class="theme-switcher-link{% if: PAGE == 'demo-trainer' %} is-active{% endif %}" href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}demos/trainer">Trainer</a>
+    <a class="theme-switcher-link{% if: PAGE == 'demo-dev' %} is-active{% endif %}" href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}demos/dev">Dev</a>
+  </nav>
+</aside>

@@ -1,0 +1,9 @@
+<label class="field">
+  <span class="field-label">{{ LABEL }}</span>
+  <select class="field-input" name="{{ NAME }}">
+    <option value=""{% if: NONE_SELECTED %} selected{% endif %}>(none)</option>
+    {% for: OPTIONS, as: 'opt' %}
+    <option value="{{ opt.value }}"{% if: opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+    {% endfor %}
+  </select>
+</label>

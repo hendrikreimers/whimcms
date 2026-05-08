@@ -1,0 +1,9 @@
+{
+  "label": "Sub-hero",
+  "description": "Quieter hero for legal / non-landing pages.",
+  "fields": {
+    "title":   { "type": "text" },
+    "eyebrow": { "type": "text" },
+    "lede":    { "type": "textarea" }
+  }
+}

@@ -1,0 +1,18 @@
+<footer class="footer footer-personal">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <span class="footer-wordmark">Iris Wren · Studio</span>
+      <p class="footer-tagline">A demo creator portfolio rendered by WhimCMS — same blocks as every other theme, restyled editorial.</p>
+    </div>
+    <nav class="footer-nav" aria-label="Footer">
+      <a href="#about" class="footer-link">About</a>
+      <a href="#work" class="footer-link">Work</a>
+      <a href="#services" class="footer-link">Services</a>
+      <a href="#contact" class="footer-link">Contact</a>
+      <a href="{% safe_href: URLS.imprint %}" class="footer-link">Imprint</a>
+      <a href="{% safe_href: URLS.privacy %}" class="footer-link">Privacy</a>
+      <a href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}" class="footer-link">Built with WhimCMS</a>
+    </nav>
+    <p class="footer-copy">Demo content — Iris Wren is a fictional creator. Layout courtesy of WhimCMS.</p>
+  </div>
+</footer>

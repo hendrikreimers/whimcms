@@ -1,0 +1,23 @@
+{@ block
+  optional: id language caption
+@}
+{# Block: code-snippet — preformatted code with a language label.
+   The code itself lives in the block body as a fenced ``` block,
+   so multi-line code does not have to fit in an attribute scalar.
+   `language` drives the visible label and a `data-lang` CSS hook;
+   no syntax highlighting at the markup layer.
+
+   Expects local attrs:
+     { language?, caption? }
+   plus implicit `body` (the Markdown-rendered fenced code block). #}
+<section class="block block-code-snippet"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    <figure class="block-code-snippet-figure reveal">
+      <div class="block-code-snippet-frame" data-lang="{{ attrs.language }}">
+        {% if: attrs.language %}<span class="block-code-snippet-lang" aria-hidden="true">{{ attrs.language }}</span>{% endif %}
+        {% html: body %}
+      </div>
+      {% if: attrs.caption %}<figcaption class="block-code-snippet-caption">{{ attrs.caption }}</figcaption>{% endif %}
+    </figure>
+  </div>
+</section>

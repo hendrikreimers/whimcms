@@ -1,0 +1,10 @@
+{# Per-field error renderer. The block-include passes the error code
+   (a single string like "required" / "invalid_email") as attrs; we
+   render the matching localised label.
+
+   Codes are emitted by lib/WhimCMS/Validator.php — keep in sync. #}
+{% if: attrs == 'required' %}{{ CURRENT_LANG.home.contact.form.errors.required }}{% endif %}
+{% if: attrs == 'too_short' %}{{ CURRENT_LANG.home.contact.form.errors.too_short }}{% endif %}
+{% if: attrs == 'too_long' %}{{ CURRENT_LANG.home.contact.form.errors.too_long }}{% endif %}
+{% if: attrs == 'invalid_format' %}{{ CURRENT_LANG.home.contact.form.errors.invalid_format }}{% endif %}
+{% if: attrs == 'invalid_email' %}{{ CURRENT_LANG.home.contact.form.errors.invalid_email }}{% endif %}

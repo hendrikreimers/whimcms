@@ -1,0 +1,14 @@
+{
+  "label": "End CTA",
+  "fields": {
+    "title": { "type": "text" },
+    "body":  { "type": "textarea" },
+    "cta": {
+      "type": "map",
+      "shape": {
+        "label": { "type": "text" },
+        "href":  { "type": "link" }
+      }
+    }
+  }
+}

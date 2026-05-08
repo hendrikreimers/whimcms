@@ -1,0 +1,65 @@
+<section class="card">
+  <h1>WhimAdmin · First-run setup</h1>
+  <p class="muted">Create the single admin account. This form is only available once per installation.</p>
+
+  {% if: ERROR %}
+  <div class="alert" role="alert">{{ ERROR }}</div>
+  {% endif %}
+
+  <form method="POST" action="{{ BASE }}/setup" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ CSRF }}">
+    <input type="hidden" name="token" value="{{ TOKEN }}">
+
+    <label class="field">
+      <span class="field-label">Username</span>
+      <input class="field-input"
+             type="text"
+             name="username"
+             value="{{ USERNAME }}"
+             autocomplete="off"
+             autofocus
+             required
+             minlength="3"
+             maxlength="32"
+             pattern="[A-Za-z][A-Za-z0-9_-]{2,31}">
+      <span class="field-help">3–32 characters · letters, digits, underscore, hyphen · must start with a letter.</span>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Email</span>
+      <input class="field-input"
+             type="email"
+             name="email"
+             value="{{ EMAIL }}"
+             autocomplete="off"
+             required
+             maxlength="254">
+      <span class="field-help">Login codes will be delivered here.</span>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Password</span>
+      <input class="field-input"
+             type="password"
+             name="password"
+             autocomplete="new-password"
+             required
+             minlength="{{ PWD_MIN }}"
+             maxlength="{{ PWD_MAX }}">
+      <span class="field-help">At least {{ PWD_MIN }} characters and must include each of: uppercase letter, lowercase letter, digit, special character (e.g. <code>! @ # $ % &amp; ? - _</code>).</span>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Confirm password</span>
+      <input class="field-input"
+             type="password"
+             name="password_confirm"
+             autocomplete="new-password"
+             required
+             minlength="{{ PWD_MIN }}"
+             maxlength="{{ PWD_MAX }}">
+    </label>
+
+    <button class="btn btn-primary" type="submit">Create account</button>
+  </form>
+</section>

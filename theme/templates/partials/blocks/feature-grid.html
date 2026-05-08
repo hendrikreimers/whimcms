@@ -1,0 +1,25 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: feature-grid — N-up cards with an inline-SVG glyph + title + body.
+   Glyph is referenced by name (e.g. "bolt", "shield") and resolves to
+   templates/partials/icons/<name>.html, an aria-hidden inline SVG.
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { icon, title, body } #}
+<section class="block block-feature-grid"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <ul class="block-feature-grid-grid reveal">
+      {% for: attrs.items, as: 'item' %}
+      <li class="block-feature-grid-item">
+        {% if: item.icon %}<div class="block-feature-grid-icon" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: item.icon } %}</div>{% endif %}
+        <h3 class="block-feature-grid-title">{{ item.title }}</h3>
+        <p class="block-feature-grid-body">{{ item.body }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

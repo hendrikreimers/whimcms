@@ -1,0 +1,21 @@
+{
+  "label": "Feature grid",
+  "description": "N-up cards with inline-SVG glyph + title + body.",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "title":   { "type": "text" },
+    "lede":    { "type": "textarea" },
+    "items": {
+      "type": "list",
+      "label": "Features",
+      "of": {
+        "type": "map",
+        "shape": {
+          "icon":  { "type": "icon" },
+          "title": { "type": "text" },
+          "body":  { "type": "textarea" }
+        }
+      }
+    }
+  }
+}

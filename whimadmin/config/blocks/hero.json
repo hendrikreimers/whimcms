@@ -1,0 +1,18 @@
+{
+  "label": "Hero",
+  "description": "Top-of-page hero. Optional image makes it a cover hero.",
+  "fields": {
+    "title":            { "type": "text",     "label": "Title (em allowed)" },
+    "eyebrow":          { "type": "text" },
+    "lede":             { "type": "textarea" },
+    "image":            { "type": "image" },
+    "imageAlt":         { "type": "text",     "label": "Image alt text" },
+    "align":            { "type": "select",   "options": ["start", "center"], "default": "start" },
+    "focusX":           { "type": "number",   "min": 0, "max": 1, "step": 0.05, "default": 0.5 },
+    "focusY":           { "type": "number",   "min": 0, "max": 1, "step": 0.05, "default": 0.5 },
+    "ctaPrimary":       { "type": "text",     "label": "Primary CTA label" },
+    "ctaPrimaryHref":   { "type": "link",     "label": "Primary CTA href" },
+    "ctaSecondary":     { "type": "text",     "label": "Secondary CTA label" },
+    "ctaSecondaryHref": { "type": "link",     "label": "Secondary CTA href" }
+  }
+}

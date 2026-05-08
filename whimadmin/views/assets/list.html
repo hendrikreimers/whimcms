@@ -1,0 +1,70 @@
+<section class="card card-wide">
+  <header class="card-header">
+    <h1>Assets <code class="muted">/{{ DIR }}</code></h1>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages">← Pages</a>
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/assets/recycler">Recycler</a>
+    </div>
+  </header>
+
+  {% if: ERROR %}<div class="alert" role="alert">{{ ERROR }}</div>{% endif %}
+  {% if: INFO %}<div class="notice" role="status">{{ INFO }}</div>{% endif %}
+
+  <div class="asset-toolbar">
+    {% if: HAS_PARENT %}
+    <a class="btn btn-ghost btn-sm" href="{{ BASE }}/assets?dir={{ PARENT }}">↑ Parent</a>
+    {% endif %}
+
+    <form method="POST" action="{{ BASE }}/assets/upload?dir={{ DIR }}" enctype="multipart/form-data" class="inline-form">
+      <input type="hidden" name="_csrf" value="{{ CSRF }}">
+      <input type="file" name="file" required>
+      <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+    </form>
+
+    <form method="POST" action="{{ BASE }}/assets/mkdir?dir={{ DIR }}" class="inline-form">
+      <input type="hidden" name="_csrf" value="{{ CSRF }}">
+      <input class="field-input" type="text" name="name" placeholder="new-folder" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" required>
+      <button type="submit" class="btn btn-ghost btn-sm">+ Folder</button>
+    </form>
+  </div>
+
+  <table class="page-list">
+    <thead><tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr></thead>
+    <tbody>
+      {% for: ENTRIES, as: 'e' %}
+      <tr>
+        <td class="asset-cell">
+          {% if: e.type == 'dir' %}<a class="asset-name" href="{{ BASE }}/assets?dir={{ e.path }}"><span class="asset-icon">📁</span> {{ e.name }}</a>{% endif %}
+          {% if: e.type == 'file' %}
+          {% if: e.is_image %}
+          <a class="asset-name" href="{% safe_href: e.url %}" target="_blank" rel="noopener noreferrer" title="Open in new tab">
+            <img class="asset-thumb" src="{{ e.url }}" alt="" loading="lazy">
+            <span class="asset-filename">{{ e.name }}</span>
+          </a>
+          {% endif %}
+          {% if: e.is_image == '' %}
+          <a class="asset-name" href="{% safe_href: e.url %}" download title="Download (non-image files do not preview safely)">
+            <span class="asset-icon">📄</span>
+            <span class="asset-filename">{{ e.name }}</span>
+          </a>
+          {% endif %}
+          {% endif %}
+        </td>
+        <td class="muted">{{ e.size_human }}</td>
+        <td class="muted">{{ e.mtime_human }}</td>
+        <td>
+          <form method="POST" action="{{ BASE }}/assets/rename?path={{ e.path }}" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ CSRF }}">
+            <input type="text" name="new_name" value="{{ e.name }}" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" required>
+            <button type="submit" class="btn btn-ghost btn-sm">Rename</button>
+          </form>
+          <form method="POST" action="{{ BASE }}/assets/delete?path={{ e.path }}" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ CSRF }}">
+            <button type="submit" class="btn btn-ghost btn-sm danger" data-confirm="Move '{{ e.name }}' to recycler?">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>

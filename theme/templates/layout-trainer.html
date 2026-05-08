@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="{{ LANG }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ META.title }}</title>
+  <meta name="description" content="{{ META.description }}" />
+
+  {% if: !SEO.indexable %}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />{% endif %}
+
+  <link rel="canonical" href="{{ SEO.canonical }}" />
+  {% for: SEO.alternates, as: 'alt' %}
+  <link rel="alternate" hreflang="{{ alt.lang }}" href="{{ alt.url }}" />
+  {% endfor %}
+  {% if: MULTI_LANG %}<link rel="alternate" hreflang="x-default" href="{{ SEO.xDefault }}" />{% endif %}
+
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content="{{ META.title }}" />
+  <meta property="og:description" content="{{ META.description }}" />
+  <meta property="og:url"         content="{{ SEO.canonical }}" />
+  {% if: SEO.ogImage %}<meta property="og:image" content="{{ SEO.ogImage }}" />{% endif %}
+  {% if: SEO.siteName %}<meta property="og:site_name" content="{{ SEO.siteName }}" />{% endif %}
+  <meta property="og:locale"      content="{{ SEO.ogLocale }}" />
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="{{ META.title }}" />
+  <meta name="twitter:description" content="{{ META.description }}" />
+  {% if: SEO.ogImage %}<meta name="twitter:image" content="{{ SEO.ogImage }}" />{% endif %}
+
+  <link rel="icon" type="image/svg+xml" href="{{ BASE }}{{ THEME_URL }}/assets/favicon.svg" />
+  <meta name="color-scheme" content="dark" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" />
+
+  <link rel="stylesheet" href="{{ BASE }}{{ THEME_URL }}/styles/base.css?v={{ CACHE_BUSTER }}" />
+  <link rel="stylesheet" href="{{ BASE }}{{ THEME_URL }}/styles/theme-trainer.css?v={{ CACHE_BUSTER }}" />
+
+  <script type="module" src="{{ BASE }}{{ THEME_URL }}/js/main.js?v={{ CACHE_BUSTER }}"></script>
+
+  <script type="application/ld+json">{!! SEO.ldJson !!}</script>
+</head>
+<body class="theme theme-trainer" data-page="{{ PAGE }}">
+  <a class="skip-link" href="#main">{{ CURRENT_LANG.a11y.skipLink }}</a>
+  {% include: 'partials/theme-switcher' %}
+  {% include: 'partials/nav-trainer' %}
+  <main id="main">
+    {% if: BLOCKS %}{% blocks %}{% endif %}
+    {% if: !BLOCKS %}{% include: PAGE_TEMPLATE %}{% endif %}
+  </main>
+  {% include: 'partials/footer-trainer' %}
+</body>
+</html>

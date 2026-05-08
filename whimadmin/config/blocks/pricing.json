@@ -1,0 +1,28 @@
+{
+  "label": "Pricing tiers",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "title":   { "type": "text" },
+    "lede":    { "type": "textarea" },
+    "items": {
+      "type": "list",
+      "of": {
+        "type": "map",
+        "shape": {
+          "name":     { "type": "text" },
+          "price":    { "type": "text" },
+          "period":   { "type": "text" },
+          "feat1":    { "type": "text" },
+          "feat2":    { "type": "text" },
+          "feat3":    { "type": "text" },
+          "feat4":    { "type": "text" },
+          "feat5":    { "type": "text" },
+          "feat6":    { "type": "text" },
+          "ctaLabel": { "type": "text" },
+          "ctaHref":  { "type": "link" },
+          "featured": { "type": "bool" }
+        }
+      }
+    }
+  }
+}

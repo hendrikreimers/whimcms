@@ -1,0 +1,66 @@
+# ============================================================
+# WhimAdmin — front-controller .htaccess
+# ------------------------------------------------------------
+# Routes every non-static request to index.php. PHP-only and
+# state directories are denied at the rewrite layer (treated
+# as 404 by the controller, never source-listed). Each of those
+# directories also ships its own deny-all .htaccess as defence
+# in depth.
+#
+# WhimAdmin assumes the parent / host .htaccess already sets
+# the broader security headers (CSP, HSTS, X-Frame-Options,
+# Referrer-Policy, etc.). The few headers below are admin-
+# specific overrides — everything is more strict than the
+# public site, never less.
+# ============================================================
+
+RewriteEngine On
+
+Options -Indexes -MultiViews
+
+# Pass through PHP-emitted error bodies — never let a parent
+# ErrorDocument override replace them with a generic page that
+# might leak information or hide the actual response.
+ErrorDocument 400 default
+ErrorDocument 403 default
+ErrorDocument 404 default
+ErrorDocument 413 default
+ErrorDocument 500 default
+
+# ----- Block PHP-only / state directories -----
+# Catches direct URL access to lib/, var/, views/, config/,
+# and any underscore-prefixed segment. Each rewrite hands off
+# to index.php which returns a uniform 404, so the directory
+# layout cannot be probed.
+RewriteRule ^(lib|var|views|config)(/|$) index.php [L]
+RewriteRule (^|/)_ index.php [L]
+
+# ----- Real static files served directly (styles, js, etc.) -----
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ----- Front controller for everything else -----
+RewriteRule ^ index.php [L]
+
+# ----- Defence-in-depth file-pattern denials -----
+<FilesMatch "^([_.])">
+    Require all denied
+</FilesMatch>
+<FilesMatch "\.(env|key|sample|bak|inc\.php|md|json|log|txt)$">
+    Require all denied
+</FilesMatch>
+
+# ----- Admin-specific header overrides -----
+# noindex/nofollow on EVERY admin response — search engines
+# must never index login forms, dashboards, edit screens.
+# X-Frame-Options DENY hardens against clickjacking; the
+# parent CSP's frame-ancestors 'none' covers modern browsers,
+# this header covers the legacy fallback.
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "no-referrer"
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, private"
+    Header always set Pragma "no-cache"
+</IfModule>

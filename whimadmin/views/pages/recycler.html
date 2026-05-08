@@ -1,0 +1,44 @@
+<section class="card card-wide">
+  <header class="card-header">
+    <h1>Page Recycler</h1>
+    <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages">← Pages</a>
+  </header>
+
+  {% if: ERROR %}<div class="alert" role="alert">{{ ERROR }}</div>{% endif %}
+  {% if: NOTICE %}<div class="notice" role="status">{{ NOTICE }}</div>{% endif %}
+
+  <p class="muted">Soft-deleted pages stay here until purged or auto-swept (configurable in <code>whimadmin/config/app.php → recycler.content_max_age_days</code>). Restore moves the file back into <code>content/&lt;lang&gt;/&lt;slug&gt;.md</code>; refuses if a page with the same lang/slug already exists.</p>
+
+  {% if: EMPTY %}
+  <p class="muted">Recycler is empty.</p>
+  {% endif %}
+
+  {% if: EMPTY == '' %}
+  <table class="page-list">
+    <thead><tr><th>Lang</th><th>Slug</th><th>Deleted at (UTC)</th><th></th></tr></thead>
+    <tbody>
+      {% for: ENTRIES, as: 'e' %}
+      <tr>
+        <td><span class="lang-tag">{{ e.lang }}</span></td>
+        <td><code>{{ e.slug }}</code></td>
+        <td class="muted">{{ e.deleted_human }}</td>
+        <td>
+          <form method="POST" action="{{ BASE }}/pages/recycler/restore" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ CSRF }}">
+            <input type="hidden" name="file" value="{{ e.filename }}">
+            <button type="submit" class="btn btn-ghost btn-sm" data-confirm="Restore '{{ e.lang }}/{{ e.slug }}.md' from the recycler? Refused if a live page with that lang/slug already exists.">Restore</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="POST" action="{{ BASE }}/pages/recycler/purge" class="inline-form">
+    <input type="hidden" name="_csrf" value="{{ CSRF }}">
+    <div class="actions">
+      <button type="submit" class="btn btn-ghost danger" data-confirm="Permanently delete every page in the recycler? This cannot be undone.">Empty recycler</button>
+    </div>
+  </form>
+  {% endif %}
+</section>

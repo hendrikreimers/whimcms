@@ -1,0 +1,17 @@
+{@ block
+  optional: id eyebrow title lede
+@}
+{# Block: prose — long-form Markdown body in a single section.
+   `body` is pre-rendered HTML from the Markdown renderer (safe subset)
+   and emitted via `{% html: body %}` so the renderer's <p>, <h2>, <ul>
+   etc. survive.
+
+   Expects local attrs:
+     { eyebrow?, title?, lede? }
+   plus implicit `body` (the block's Markdown content). #}
+<section class="block block-prose"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <div class="reveal block-prose-body">{% html: body %}</div>
+  </div>
+</section>

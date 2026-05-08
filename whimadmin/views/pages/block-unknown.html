@@ -1,0 +1,8 @@
+<fieldset class="block-edit block-edit-unknown" data-block-index="{{ INDEX }}">
+  <legend class="block-legend">
+    <span class="block-type-tag">{{ TYPE }}</span>
+    <span class="block-label">Unknown block type</span>
+  </legend>
+  <p class="muted">No partial or sidecar found for <code>{{ TYPE }}</code>. Add the partial under <code>theme/templates/partials/blocks/{{ TYPE }}.html</code> (and optionally a sidecar at <code>whimadmin/config/blocks/{{ TYPE }}.json</code>) — then reload this page.</p>
+  <input type="hidden" name="block[{{ INDEX }}][type]" value="{{ TYPE }}">
+</fieldset>

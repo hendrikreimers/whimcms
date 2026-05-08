@@ -1,0 +1,16 @@
+{
+  "label": "Hero (personal 4:5 portrait)",
+  "fields": {
+    "title":            { "type": "text" },
+    "eyebrow":          { "type": "text" },
+    "lede":             { "type": "textarea" },
+    "image":            { "type": "image" },
+    "imageAlt":         { "type": "text" },
+    "focusX":           { "type": "number", "min": 0, "max": 1, "step": 0.05, "default": 0.5 },
+    "focusY":           { "type": "number", "min": 0, "max": 1, "step": 0.05, "default": 0.5 },
+    "ctaPrimary":       { "type": "text" },
+    "ctaPrimaryHref":   { "type": "link" },
+    "ctaSecondary":     { "type": "text" },
+    "ctaSecondaryHref": { "type": "link" }
+  }
+}

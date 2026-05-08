@@ -1,0 +1,40 @@
+<section class="card card-wide">
+  <header class="card-header">
+    <h1>History · <code>{{ LANG }}/{{ SLUG }}</code></h1>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages/edit?lang={{ LANG }}&amp;slug={{ SLUG }}">← Back to edit</a>
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages">All pages</a>
+    </div>
+  </header>
+
+  {% if: ERROR %}<div class="alert" role="alert">{{ ERROR }}</div>{% endif %}
+  {% if: NOTICE %}<div class="notice" role="status">{{ NOTICE }}</div>{% endif %}
+
+  <p class="muted">A snapshot is taken on every save. The most recent <code>content.history_max</code> snapshots are kept per page; older ones are pruned on save. Old snapshots are also auto-swept based on <code>recycler.content_max_age_days</code>. Restoring overwrites the live page; the current state is itself snapshotted before restore, so a restore is reversible.</p>
+
+  {% if: EMPTY %}
+  <p class="muted">No snapshots yet — save the page once to start the history.</p>
+  {% endif %}
+
+  {% if: EMPTY == '' %}
+  <table class="page-list">
+    <thead><tr><th>Snapshot (UTC)</th><th>Size</th><th></th></tr></thead>
+    <tbody>
+      {% for: ENTRIES, as: 'e' %}
+      <tr>
+        <td><code>{{ e.human }}</code></td>
+        <td class="muted">{{ e.size_human }}</td>
+        <td>
+          <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages/history/raw?lang={{ LANG }}&amp;slug={{ SLUG }}&amp;file={{ e.filename }}" target="_blank" rel="noopener noreferrer">View raw</a>
+          <form method="POST" action="{{ BASE }}/pages/history/restore?lang={{ LANG }}&amp;slug={{ SLUG }}" class="inline-form">
+            <input type="hidden" name="_csrf" value="{{ CSRF }}">
+            <input type="hidden" name="file" value="{{ e.filename }}">
+            <button type="submit" class="btn btn-ghost btn-sm" data-confirm="Restore this snapshot? The current state will be snapshotted to history first (so this action IS reversible — but every unsaved edit on the live page is replaced).">Restore</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>

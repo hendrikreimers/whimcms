@@ -1,0 +1,16 @@
+{# Expects local attrs: { eyebrow, title?, lede? } #}
+<div class="section-head">
+  <div class="reveal">
+    <span class="eyebrow">{{ attrs.eyebrow }}</span>
+  </div>
+  {% if: attrs.title %}
+  <div class="reveal" data-d="80">
+    <h2 class="section-title">{!! attrs.title !!}</h2>
+  </div>
+  {% endif %}
+  {% if: attrs.lede %}
+  <div class="reveal" data-d="160">
+    <p class="section-lede">{{ attrs.lede }}</p>
+  </div>
+  {% endif %}
+</div>

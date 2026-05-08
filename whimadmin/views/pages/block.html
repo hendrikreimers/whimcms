@@ -1,0 +1,23 @@
+<details class="block-edit" data-block-index="{{ INDEX }}">
+  <summary class="block-summary">
+    <span class="block-drag-handle" draggable="true" title="Drag to reorder" aria-hidden="true">⋮⋮</span>
+    <span class="block-type-tag">{{ TYPE }}</span>
+    <span class="block-label">{{ LABEL }}</span>
+    {% if: HAS_PREVIEW %}<span class="block-preview">{{ PREVIEW }}</span>{% endif %}
+    {% if: HAS_PREVIEW == '' %}<span class="block-preview muted"><em>(empty)</em></span>{% endif %}
+  </summary>
+  <div class="block-body">
+    <input type="hidden" name="block[{{ INDEX }}][type]" value="{{ TYPE }}">
+    {% html: FIELDS_HTML %}
+
+    <div class="block-actions">
+      {% if: IS_FIRST %}<button type="button" class="btn btn-ghost btn-sm" disabled>↑</button>{% endif %}
+      {% if: IS_FIRST == '' %}<button class="btn btn-ghost btn-sm" type="submit" name="action" value="move-up:{{ INDEX }}" title="Move up">↑</button>{% endif %}
+      {% if: IS_LAST %}<button type="button" class="btn btn-ghost btn-sm" disabled>↓</button>{% endif %}
+      {% if: IS_LAST == '' %}<button class="btn btn-ghost btn-sm" type="submit" name="action" value="move-down:{{ INDEX }}" title="Move down">↓</button>{% endif %}
+      <button class="btn btn-ghost btn-sm" type="submit" name="action" value="cut:{{ INDEX }}">Cut</button>
+      {% if: HAS_CLIPBOARD %}<button class="btn btn-ghost btn-sm" type="submit" name="action" value="paste-after:{{ INDEX }}">Paste after</button>{% endif %}
+      <button class="btn btn-ghost btn-sm danger" type="submit" name="action" value="remove:{{ INDEX }}" data-confirm="Remove this block? Your other edits on the page will also be saved.">Remove</button>
+    </div>
+  </div>
+</details>

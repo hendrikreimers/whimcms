@@ -1,0 +1,80 @@
+{
+  "a11y": {
+    "skipLink": "Skip to content"
+  },
+  "nav": {
+    "brandAria": "WhimCMS — go to homepage",
+    "menuAria": "Open main menu",
+    "primaryAria": "Primary",
+    "languageAria": "Language",
+    "features": "Features",
+    "themes": "Themes",
+    "architecture": "Architecture",
+    "cta": "Get in touch"
+  },
+  "footer": {
+    "navAria": "Footer",
+    "tagline": "A minimal, security-first PHP CMS for people who want to ship a website, not maintain a platform.",
+    "imprint": "Imprint",
+    "privacy": "Privacy",
+    "copy": "WhimCMS — open showcase. Strip the demo themes to use it as your own site."
+  },
+  "meta": {
+    "home":    { "title": "WhimCMS — a minimal, security-first PHP CMS",  "description": "Server-rendered, file-based, no build step. One repo you can read in an afternoon and host anywhere PHP runs." },
+    "imprint": { "title": "Imprint — WhimCMS",  "description": "Operator information for this WhimCMS deployment." },
+    "privacy": { "title": "Privacy — WhimCMS",  "description": "What this site stores, what it does not, and how to reach the operator." },
+    "demo-business": { "title": "Business demo — WhimCMS", "description": "A SaaS-style landing page rendered by WhimCMS. Same blocks, different theme." },
+    "demo-personal": { "title": "Personal demo — WhimCMS", "description": "A creator portfolio rendered by WhimCMS. Same blocks, different theme." },
+    "demo-trainer":  { "title": "Trainer demo — WhimCMS",  "description": "A functional-fitness coach landing rendered by WhimCMS." },
+    "demo-dev":      { "title": "Dev demo — WhimCMS",      "description": "A developer-tool landing rendered by WhimCMS." }
+  },
+  "errors": {
+    "_404": {
+      "title": "Not found",
+      "description": "The page you were looking for is not here. It may have moved, or never existed.",
+      "cta": "Back to home"
+    }
+  },
+  "contactMail": {
+    "recipient": {
+      "subject": "New contact-form submission",
+      "intro": "Someone reached out via the WhimCMS demo contact form:",
+      "footer": "Sent from the WhimCMS demo install."
+    },
+    "sender": {
+      "subject": "We received your message",
+      "greeting": "Hi,",
+      "body": "Thanks for reaching out — your message arrived safely. We'll reply as soon as we can.",
+      "signature": "— The WhimCMS team"
+    }
+  },
+  "home": {
+    "contact": {
+      "email": "demo@example.com",
+      "form": {
+        "name":    "Your name",
+        "email":   "Email",
+        "message": "Message",
+        "submit":  "Send message",
+        "sent":    "Thanks — your message is on its way.",
+        "errors": {
+          "required":       "Please fill this in.",
+          "too_short":      "A little longer, please.",
+          "too_long":       "That is too long.",
+          "invalid_format": "That doesn't look right.",
+          "invalid_email":  "Please enter a valid email address."
+        },
+        "globalErrors": {
+          "token":       "Your session expired. Please reload the page and try again.",
+          "rate_limit":  "Too many submissions in a short time. Please wait a moment.",
+          "blocked":     "Submission blocked.",
+          "mail_failed": "We could not send your message. Please try again later or write to us directly.",
+          "captcha":     "Captcha check failed. Please reload the page and try again."
+        },
+        "consentBefore": "I have read and accept the ",
+        "consentLink":   "privacy policy",
+        "consentAfter":  "."
+      }
+    }
+  }
+}

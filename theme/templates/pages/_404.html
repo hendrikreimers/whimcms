@@ -1,0 +1,11 @@
+<section class="page-404">
+  <div class="container">
+    <span class="page-404-eyebrow">404</span>
+    <h1 class="page-404-title">{{ CURRENT_LANG.errors._404.title }}</h1>
+    <p class="page-404-body">{{ CURRENT_LANG.errors._404.description }}</p>
+    <a href="{% safe_href: URLS.home %}" class="btn btn-primary">
+      {{ CURRENT_LANG.errors._404.cta }}
+      {% include: 'partials/icon-arrow-out' %}
+    </a>
+  </div>
+</section>

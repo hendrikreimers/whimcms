@@ -1,0 +1,18 @@
+<footer class="footer footer-dev">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <span class="footer-mark"><span aria-hidden="true">$</span> halt</span>
+      <p class="footer-tagline">A demo CLI tool landing rendered by WhimCMS — same blocks as every other theme, restyled developer.</p>
+    </div>
+    <nav class="footer-nav" aria-label="Footer">
+      <a href="#install" class="footer-link">Install</a>
+      <a href="#features" class="footer-link">Features</a>
+      <a href="#docs" class="footer-link">Docs</a>
+      <a href="#contact" class="footer-link">Contact</a>
+      <a href="{% safe_href: URLS.imprint %}" class="footer-link">Imprint</a>
+      <a href="{% safe_href: URLS.privacy %}" class="footer-link">Privacy</a>
+      <a href="{{ BASE }}/{% if: MULTI_LANG %}en/{% endif %}" class="footer-link">Built with WhimCMS</a>
+    </nav>
+    <p class="footer-copy"><span aria-hidden="true">// </span>Demo content — halt is a fictional CLI. Layout courtesy of WhimCMS.</p>
+  </div>
+</footer>

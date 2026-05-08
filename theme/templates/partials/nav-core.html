@@ -1,0 +1,41 @@
+<header class="nav nav-core" data-nav>
+  <div class="container nav-inner">
+    <a href="{% safe_href: URLS.home %}" class="nav-brand" aria-label="{{ CURRENT_LANG.nav.brandAria }}">
+      <span class="nav-brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none"><rect x="6" y="6" width="36" height="36" rx="6" fill="currentColor"/><rect x="22" y="22" width="36" height="36" rx="6" fill="currentColor" opacity="0.45"/></svg>
+      </span>
+      <span class="nav-brand-text">WhimCMS</span>
+    </a>
+
+    {# Hamburger — visible only at the small-screen breakpoint where
+       .nav-links collapses into a drawer. Toggled by js/nav.js. #}
+    <button type="button" class="nav-toggle"
+            aria-controls="primary-nav"
+            aria-expanded="false"
+            aria-label="{{ CURRENT_LANG.nav.menuAria }}"
+            data-nav-toggle>
+      <span class="nav-toggle-bar" aria-hidden="true"></span>
+      <span class="nav-toggle-bar" aria-hidden="true"></span>
+      <span class="nav-toggle-bar" aria-hidden="true"></span>
+    </button>
+
+    <div class="nav-primary" id="primary-nav" data-nav-primary>
+      <nav class="nav-links" aria-label="{{ CURRENT_LANG.nav.primaryAria }}">
+        <a href="{{ URLS.home }}#features" class="nav-link">{{ CURRENT_LANG.nav.features }}</a>
+        <a href="{{ URLS.home }}#themes" class="nav-link">{{ CURRENT_LANG.nav.themes }}</a>
+        <a href="{{ URLS.home }}#architecture" class="nav-link">{{ CURRENT_LANG.nav.architecture }}</a>
+      </nav>
+      <div class="nav-actions">
+        {% if: MULTI_LANG %}
+        <div class="lang-switch" role="group" aria-label="{{ CURRENT_LANG.nav.languageAria }}">
+          {% for: LANG_SWITCH, as: 's' %}{% if: !loop.first %}<span class="lang-sep" aria-hidden="true">·</span>{% endif %}<a class="lang-btn{% if: s.active %} is-active{% endif %}" href="{% safe_href: s.url %}"{% if: s.active %} aria-current="true"{% endif %}>{{ s.code }}</a>{% endfor %}
+        </div>
+        {% endif %}
+        <a href="{{ URLS.home }}#contact" class="btn btn-primary btn-nav-cta">
+          {{ CURRENT_LANG.nav.cta }}
+          {% include: 'partials/icon-arrow-out' %}
+        </a>
+      </div>
+    </div>
+  </div>
+</header>

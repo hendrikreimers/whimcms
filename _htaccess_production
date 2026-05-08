@@ -1,0 +1,278 @@
+# ============================================================
+# WhimCMS — production .htaccess (standalone)
+# ------------------------------------------------------------
+# Drop-in for a deployment without a parent .htaccess. Rename
+# this file to ".htaccess" on the production webspace.
+#
+# Sections (in order):
+#   1. Front-controller routing
+#   2. PHP-only path blocking
+#   3. File-pattern denials
+#   4. PHP runtime hardening
+#   5. Caching policy (long-lived for assets, no-store for HTML)
+#   6. Security headers
+# ============================================================
+
+RewriteEngine On
+Options -Indexes -MultiViews
+
+# Opt out of any host-level ErrorDocument overrides. Our PHP layer
+# emits its own response body for 4xx / 5xx; "default" tells Apache to
+# pass that through unchanged instead of substituting a host-provided
+# error page. Without this, shared hosts with a parent .htaccess that
+# defines `ErrorDocument 500 /…/error.html` would replace the body
+# we wrote and the client would never see the diagnostic.
+ErrorDocument 400 default
+ErrorDocument 403 default
+ErrorDocument 404 default
+ErrorDocument 413 default
+ErrorDocument 500 default
+
+
+# ----- 0. HTTPS enforcement ----------------------------------------------
+#
+# Redirect any plain-HTTP request to HTTPS. Two conditions to support
+# both direct deployment and reverse-proxy / CDN setups (Cloudflare,
+# load balancer, etc.):
+#
+#   - %{HTTPS} != on              — direct connection isn't TLS
+#   - X-Forwarded-Proto != https  — the upstream proxy didn't terminate TLS
+#
+# Skip this block (comment it out) if your hoster already enforces HTTPS
+# at the panel / vhost level — duplicate redirects don't break anything
+# but produce extra hops. Leave it on if you're not sure; it's idempotent.
+#
+# Placed BEFORE every other rewrite so HTTP requests are redirected
+# before they reach the front controller.
+RewriteCond %{HTTPS}                 !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+
+# ----- 1. Front controller -----------------------------------------------
+
+# Image-server endpoint — cropped variants live at /img-c/<basename>-<hash>.<ext>.
+# Files are written only by the {% image %} template directive at render
+# time and served read-only by Image\CroppedServer. Routed explicitly so
+# the dispatcher's image-c branch is reached even if a real /img-c/
+# directory ever exists at the document root.
+RewriteRule ^img-c/ index.php [L]
+
+# Sensitive directories: rewrite to PHP so the response is a 404 from the
+# app, not a 403 from Apache. Keeps the existence of these paths private.
+# Both root-level (paths.theme = '.') and theme-nested (paths.theme =
+# 'theme') variants of templates/ and i18n/ are caught. Each dir also
+# ships its own deny-all .htaccess as defense in depth.
+#
+# `content` is included because page Markdown sources are author-only
+# (rendered through PageLoader, never served raw).
+#
+# `<dir>.<suffix>` rules catch the sibling-bundle convention used for
+# theme activation (`theme.example`, `content.example`, `config.example`,
+# `assets.example`, …). These bundles should not ship to production —
+# but if they do, blocking them keeps source files private. Bare
+# `assets/` (raster source for the image server) stays servable;
+# only suffixed variants are blocked.
+RewriteRule ^(lib|templates|i18n|var|logs|config|content)(/|$) index.php [L]
+RewriteRule ^(config|content|theme|assets)\.[a-zA-Z0-9_-]+(/|$) index.php [L]
+RewriteRule ^theme/(templates|i18n|content)(/|$) index.php [L]
+RewriteRule ^theme\.[a-zA-Z0-9_-]+/(templates|i18n|content)(/|$) index.php [L]
+
+# Block any path containing a `_`-prefixed segment (e.g. /_docs/, /_audits/).
+# Defence-in-depth — INSTALL.md instructs operators to skip `_*` files when
+# uploading (those are dev-only: docs, alternative htaccess variants), but
+# if a directory like _docs/ accidentally lands on the webspace, this
+# returns the same privacy-preserving 404 from PHP as the other sensitive-
+# directory rules above instead of leaking source content.
+RewriteRule (^|/)_ index.php [L]
+
+# Dotfile- and sensitive-extension requests go through the front controller
+# so the response is a privacy-preserving 404 from PHP — Apache's default
+# 4xx error page leaks the server-version banner in the response body, the
+# PHP layer's error response does not. The `<FilesMatch>` denials further
+# down stay in place as defence-in-depth in case a rewrite is bypassed.
+RewriteRule (^|/)\. index.php [L]
+RewriteRule \.(env|key|sample|bak|inc\.php|class\.php|md|tmpl\.html|log)$ index.php [L]
+
+# Real static files (CSS, JS, SVG, fonts, …) served directly.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Everything else goes through the front controller.
+RewriteRule ^ index.php [L]
+
+
+# ----- 2. File-pattern denials (defence-in-depth) ------------------------
+
+# Block dotfiles and underscore-prefixed files (e.g. _htaccess_production).
+<FilesMatch "^([_.])">
+    Require all denied
+</FilesMatch>
+
+# Block source / backup / key file types.
+<FilesMatch "\.(env|key|sample|bak|inc\.php|class\.php|md|tmpl\.html|log)$">
+    Require all denied
+</FilesMatch>
+
+# Block legacy Composer / framework leftovers if anything ever lands here.
+<FilesMatch "^(LICENSE|README|composer\.(json|lock)|package(-lock)?\.json)$">
+    Require all denied
+</FilesMatch>
+
+
+# ----- 3. PHP runtime ----------------------------------------------------
+
+<IfModule mod_php.c>
+    php_flag display_errors  Off
+    php_flag log_errors      On
+    php_flag expose_php      Off
+    # If you want app logs in a project-local file, point error_log here.
+    # The path must be writable by the PHP process and outside the web root.
+    # php_value error_log /home/your-user/php-error.log
+</IfModule>
+
+# For PHP-FPM hosts (php_flag is ignored), use these instead via the host
+# control panel or include them in a .user.ini next to index.php:
+#   display_errors = Off
+#   log_errors     = On
+#   expose_php     = Off
+
+
+# ----- 4. Caching --------------------------------------------------------
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css                "access plus 1 year"
+    ExpiresByType application/javascript  "access plus 1 year"
+    ExpiresByType image/svg+xml           "access plus 1 year"
+    ExpiresByType font/woff2              "access plus 1 year"
+    ExpiresByType image/png               "access plus 1 month"
+    ExpiresByType image/jpeg              "access plus 1 month"
+    ExpiresByType image/webp              "access plus 1 month"
+    ExpiresByType text/html               "access plus 0 seconds"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Static assets get long, immutable caching. The cache buster query
+    # string in the asset URLs (?v=N) ensures clients pick up new
+    # versions on deploy without hand-clearing.
+    <FilesMatch "\.(css|js|svg|woff2|png|jpg|jpeg|webp)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    # HTML / PHP must never be cached so updates land immediately.
+    # `setifempty` keeps PHP-set headers intact — the image server
+    # at /img-c/ runs through index.php but emits its own long
+    # `immutable` Cache-Control which would otherwise be clobbered.
+    <FilesMatch "\.(html|php)$">
+        Header setifempty Cache-Control "no-store, must-revalidate"
+        Header setifempty Pragma "no-cache"
+        Header setifempty Expires "0"
+    </FilesMatch>
+</IfModule>
+
+
+# ----- 5. Security headers ----------------------------------------------
+
+<IfModule mod_headers.c>
+
+    # All security headers below use `always set` (not plain `set`) so the
+    # header is emitted on Apache-generated 4xx / 5xx responses too —
+    # plain `set` only fires on the 2xx happy path, which would leave
+    # error responses (e.g. a 403 from a `<FilesMatch>` deny) without
+    # CSP / Permissions-Policy / etc.
+
+    # Content-Security-Policy: same-origin only, no inline anything.
+    # The site emits no <script> or <style> with inline content and no
+    # inline event handlers, so 'unsafe-inline' is deliberately absent.
+    Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; font-src 'self'; media-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+    # ----- Google Fonts opt-in alternative CSP -----
+    # If you load fonts via Google's CDN instead of self-hosting them
+    # (i.e. <link rel="stylesheet" href="https://fonts.googleapis.com/...">
+    # in your layout), the strict CSP above blocks both the stylesheet
+    # and the font files. Comment out the line above and uncomment the
+    # block below — it adds Google's two domains to the relevant
+    # directives and nothing else.
+    #
+    # Trade-off: every page request leaks visitor IP + User-Agent to
+    # Google's CDN. For a privacy-conscious site, self-hosting is
+    # almost always the better answer (the WhimCMS default `fonts/`
+    # directory + a @font-face declaration in styles/fonts.css covers
+    # it). Use this opt-in only when self-hosting is genuinely
+    # impractical for the project.
+    #
+    # Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; media-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+    # X-XSS-Protection: deprecated and known to cause vulnerabilities of
+    # its own. Modern guidance is "0" (explicitly off).
+    Header always set X-XSS-Protection "0"
+
+    Header always set Referrer-Policy            "no-referrer"
+    Header always set X-Content-Type-Options     "nosniff"
+    Header always set X-Frame-Options            "DENY"
+    Header always set Cross-Origin-Opener-Policy   "same-origin"
+    Header always set Cross-Origin-Embedder-Policy "require-corp"
+
+    # Cross-Origin-Resource-Policy: restrict who can embed this site's
+    # resources cross-origin. `same-site` allows your own subdomains
+    # (CDN, assets.example.com) but blocks unrelated origins. Use
+    # `same-origin` for the strictest setting if all assets live on
+    # the same hostname.
+    Header always set Cross-Origin-Resource-Policy "same-site"
+
+    Header always set Permissions-Policy "geolocation=(), camera=(), microphone=(), midi=(), payment=(), fullscreen=(), accelerometer=(), gyroscope=(), magnetometer=()"
+
+    # Suppress the X-Powered-By header (PHP) on every response.
+    Header unset X-Powered-By
+    Header always unset X-Powered-By
+
+    # NOTE: the `Server` header (e.g. `Apache/2.4.67 (Debian)`) cannot
+    # be reliably suppressed from .htaccess in vanilla Apache 2.4 —
+    # the Server header is added very late in the response pipeline
+    # and `Header unset Server` is a no-op in most module orderings.
+    # The operator-side fix is `ServerTokens Prod` and `ServerSignature
+    # Off` in the Apache main config (httpd.conf or vhost). The lines
+    # below are best-effort: they work on Apache builds with mod_security
+    # or specific module orderings, and do no harm where they don't.
+    Header unset Server
+    Header always unset Server
+
+    # Belt-and-braces against a stale debug flag. The PHP layer sets
+    # X-H42-Error and X-H42-Cache only when config/app.php → debug = true.
+    # If a deploy ever forgets to flip debug back to false, X-H42-Error
+    # would leak the unhandled-exception class name (useful for stack
+    # fingerprinting) and X-H42-Cache the content-cache hit/miss state.
+    # Stripping at the Apache level so a forgotten flag cannot leak.
+    Header always unset X-H42-Error
+    Header always unset X-H42-Cache
+
+    # HSTS — production default is Stage 2 (1 year, includeSubDomains, no preload).
+    # That gives full HSTS protection, and if something breaks you can revert by
+    # downgrading to Stage 1 and waiting out the previous max-age — which is
+    # 1 year, so plan carefully. Stage 3 (preload) is opt-in only and
+    # essentially permanent (browser-baked-in, removal takes months).
+    #
+    # PRECONDITION (all stages): HTTPS must be fully enforced for the domain
+    # (HTTP → HTTPS redirect at host level) AND every subdomain that visitors
+    # might reach must serve HTTPS, BEFORE Stage 2 is active. Otherwise
+    # visitors who reach a http:// subdomain are locked out for max-age.
+    #
+    # Stage 1 — short roll-out window (5 min). Use ONLY for first-deploy
+    # smoke testing on a fresh domain. Comment out Stage 2 and uncomment:
+    # Header always set Strict-Transport-Security "max-age=300"
+    #
+    # Stage 2 — production default (1 year, includeSubDomains, no preload):
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    #
+    # Stage 3 — preload. Submission to https://hstspreload.org bakes the
+    # rule into Chrome/Firefox/Safari source for ALL future installs.
+    # Removal takes months. Only enable if (a) every subdomain serves
+    # HTTPS forever, (b) you intend to submit, and (c) you accept that
+    # rolling back is essentially impossible. Comment out Stage 2 first:
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # Pre-launch: hide from search engines. Remove once the site is live.
+    # Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+</IfModule>

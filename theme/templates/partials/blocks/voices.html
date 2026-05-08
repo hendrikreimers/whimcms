@@ -1,0 +1,36 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: voices — testimonial / quote grid.
+   Each item is a `<figure>` with a `<blockquote>` and a `<figcaption>`
+   crediting the speaker. Optional `image` becomes a small avatar.
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { quote, name, role?, image?, imageAlt? } #}
+<section class="block block-voices"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <ul class="block-voices-grid reveal">
+      {% for: attrs.items, as: 'item' %}
+      <li class="block-voices-item">
+        <figure class="block-voices-card">
+          <blockquote class="block-voices-quote">{{ item.quote }}</blockquote>
+          <figcaption class="block-voices-credit">
+            {% if: item.image %}
+            <span class="block-voices-avatar">
+              <img src="{% image: item.image, width: 64, height: 64 %}" alt="{{ item.imageAlt }}" width="64" height="64" loading="lazy" />
+            </span>
+            {% endif %}
+            <span class="block-voices-credit-text">
+              <span class="block-voices-name">{{ item.name }}</span>
+              {% if: item.role %}<span class="block-voices-role">{{ item.role }}</span>{% endif %}
+            </span>
+          </figcaption>
+        </figure>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

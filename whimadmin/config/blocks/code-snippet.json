@@ -1,0 +1,9 @@
+{
+  "label": "Code snippet",
+  "description": "Body holds the fenced code block.",
+  "fields": {
+    "language": { "type": "text" },
+    "caption":  { "type": "text" }
+  },
+  "body": { "type": "markdown", "label": "Code (open + close with ``` on their own lines)" }
+}

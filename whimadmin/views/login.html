@@ -1,0 +1,37 @@
+<section class="card">
+  <h1>WhimAdmin · Sign in</h1>
+
+  {% if: ERROR %}
+  <div class="alert" role="alert">{{ ERROR }}</div>
+  {% endif %}
+
+  <form method="POST" action="{{ BASE }}/login" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ CSRF }}">
+
+    <label class="field">
+      <span class="field-label">Username</span>
+      <input class="field-input"
+             type="text"
+             name="username"
+             value="{{ USERNAME }}"
+             autocomplete="username"
+             autofocus
+             required
+             maxlength="32">
+    </label>
+
+    <label class="field">
+      <span class="field-label">Password</span>
+      <input class="field-input"
+             type="password"
+             name="password"
+             autocomplete="current-password"
+             required
+             maxlength="256">
+    </label>
+
+    <button class="btn btn-primary" type="submit">Continue</button>
+  </form>
+
+  <p class="muted small">A login code will be mailed to the address on file. The code expires after a few minutes.</p>
+</section>

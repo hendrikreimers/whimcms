@@ -1,0 +1,19 @@
+{@ block
+  required: title cta
+  optional: id body
+@}
+{# Block: end-cta — closing call-to-action banner at the bottom of a
+   page. One title, optional body, one CTA.
+
+   Expects local attrs:
+     { title, cta, body? }
+       cta: { label, href } #}
+<section class="block block-end-cta"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    <div class="block-end-cta-inner reveal">
+      <h2 class="block-end-cta-title">{!! attrs.title !!}</h2>
+      {% if: attrs.body %}<p class="block-end-cta-body">{{ attrs.body }}</p>{% endif %}
+      <a class="btn btn-primary block-end-cta-btn" href="{% safe_href: attrs.cta.href %}">{{ attrs.cta.label }}{% include: 'partials/icon-arrow-out' %}</a>
+    </div>
+  </div>
+</section>

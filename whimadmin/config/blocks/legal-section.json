@@ -1,0 +1,8 @@
+{
+  "label": "Legal section",
+  "description": "One heading + Markdown body.",
+  "fields": {
+    "heading": { "type": "text" }
+  },
+  "body": { "type": "markdown", "label": "Body (Markdown)" }
+}

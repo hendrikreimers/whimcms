@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="referrer" content="no-referrer">
+  <title>WhimAdmin</title>
+  <link rel="stylesheet" href="{{ BASE }}/styles/admin.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="admin-header">
+    <div class="admin-header-inner">
+      {% if: AUTHED_USER %}<a class="admin-brand" href="{{ BASE }}/pages">WhimAdmin</a>{% endif %}
+      {% if: AUTHED_USER == '' %}<span class="admin-brand">WhimAdmin</span>{% endif %}
+      {% if: AUTHED_USER %}
+      <nav class="admin-nav" aria-label="Sections">
+        <a href="{{ BASE }}/pages">Pages</a>
+        <a href="{{ BASE }}/assets">Assets</a>
+        <a href="{{ BASE }}/settings/routes">Routes</a>
+        <a href="{{ BASE }}/settings/languages">Languages</a>
+      </nav>
+      <form method="POST" action="{{ BASE }}/logout" class="admin-logout">
+        <input type="hidden" name="_csrf" value="{{ CSRF_LOGOUT }}">
+        <span class="admin-user" title="Signed in">{{ AUTHED_USER }}</span>
+        <button class="btn btn-ghost btn-sm" type="submit">Sign out</button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
+  <main id="main" class="admin-main">
+    {% html: CONTENT %}
+  </main>
+  <script type="module" src="{{ BASE }}/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "label": "Gallery",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "items": {
+      "type": "list",
+      "of": {
+        "type": "map",
+        "shape": {
+          "path":     { "type": "image" },
+          "alt":      { "type": "text" },
+          "caption":  { "type": "text" },
+          "lightbox": { "type": "bool" }
+        }
+      }
+    }
+  }
+}

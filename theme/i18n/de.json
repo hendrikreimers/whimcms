@@ -1,0 +1,76 @@
+{
+  "a11y": {
+    "skipLink": "Zum Inhalt springen"
+  },
+  "nav": {
+    "brandAria": "WhimCMS — zur Startseite",
+    "menuAria": "Hauptmenü öffnen",
+    "primaryAria": "Hauptnavigation",
+    "languageAria": "Sprache",
+    "features": "Features",
+    "themes": "Themes",
+    "architecture": "Architektur",
+    "cta": "Kontakt"
+  },
+  "footer": {
+    "navAria": "Footer",
+    "tagline": "Ein minimales, sicherheitsorientiertes PHP-CMS für Leute, die eine Website veröffentlichen wollen — keine Plattform pflegen.",
+    "imprint": "Impressum",
+    "privacy": "Datenschutz",
+    "copy": "WhimCMS — offene Demo. Demo-Themes entfernen, um es als eigene Seite zu nutzen."
+  },
+  "meta": {
+    "home":    { "title": "WhimCMS — minimales, sicherheitsorientiertes PHP-CMS", "description": "Server-gerendert, dateibasiert, kein Build-Step. Eine Codebasis, die du an einem Nachmittag liest und überall hostest, wo PHP läuft." },
+    "imprint": { "title": "Impressum — WhimCMS",   "description": "Betreiberinformationen dieser WhimCMS-Installation." },
+    "privacy": { "title": "Datenschutz — WhimCMS", "description": "Was diese Seite speichert, was nicht, und wie du den Betreiber erreichst." }
+  },
+  "errors": {
+    "_404": {
+      "title": "Seite nicht gefunden",
+      "description": "Die gesuchte Seite ist hier nicht zu finden. Sie wurde verschoben oder existierte nie.",
+      "cta": "Zur Startseite"
+    }
+  },
+  "contactMail": {
+    "recipient": {
+      "subject": "Neue Kontaktformular-Übermittlung",
+      "intro": "Jemand hat sich über das WhimCMS-Demo-Kontaktformular gemeldet:",
+      "footer": "Gesendet von der WhimCMS-Demo-Installation."
+    },
+    "sender": {
+      "subject": "Wir haben deine Nachricht erhalten",
+      "greeting": "Hallo,",
+      "body": "Danke für deine Nachricht — sie ist angekommen. Wir melden uns so bald wie möglich zurück.",
+      "signature": "— Das WhimCMS-Team"
+    }
+  },
+  "home": {
+    "contact": {
+      "email": "demo@example.com",
+      "form": {
+        "name":    "Dein Name",
+        "email":   "E-Mail",
+        "message": "Nachricht",
+        "submit":  "Nachricht senden",
+        "sent":    "Danke — deine Nachricht ist unterwegs.",
+        "errors": {
+          "required":       "Bitte ausfüllen.",
+          "too_short":      "Bitte etwas länger.",
+          "too_long":       "Das ist zu lang.",
+          "invalid_format": "Das sieht nicht richtig aus.",
+          "invalid_email":  "Bitte eine gültige E-Mail-Adresse eingeben."
+        },
+        "globalErrors": {
+          "token":       "Deine Sitzung ist abgelaufen. Bitte lade die Seite neu und versuche es erneut.",
+          "rate_limit":  "Zu viele Anfragen in kurzer Zeit. Bitte einen Moment warten.",
+          "blocked":     "Übermittlung blockiert.",
+          "mail_failed": "Wir konnten deine Nachricht nicht senden. Bitte später erneut versuchen oder direkt schreiben.",
+          "captcha":     "Captcha-Prüfung fehlgeschlagen. Bitte lade die Seite neu und versuche es erneut."
+        },
+        "consentBefore": "Ich habe die ",
+        "consentLink":   "Datenschutzerklärung",
+        "consentAfter":  " gelesen und akzeptiert."
+      }
+    }
+  }
+}

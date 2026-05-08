@@ -1,0 +1,16 @@
+{@ block
+  required: title
+  optional: id eyebrow lede
+@}
+{# Block: sub-hero — top of every non-home page (legal pages,
+   sub-sections). Smaller and quieter than the home hero.
+
+   Expects local attrs:
+     { title, eyebrow?, lede? } #}
+<section class="block block-sub-hero"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}<span class="eyebrow">{{ attrs.eyebrow }}</span>{% endif %}
+    <h1 class="block-sub-hero-title">{!! attrs.title !!}</h1>
+    {% if: attrs.lede %}<p class="block-sub-hero-lede">{{ attrs.lede }}</p>{% endif %}
+  </div>
+</section>

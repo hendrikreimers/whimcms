@@ -1,0 +1,4 @@
+{# Privacy-consent label text with an inline link to the privacy page.
+   The attrs string holds the text split around a [PRIVACY_LINK]
+   placeholder; we render the prefix, then the link, then the suffix. #}
+{{ CURRENT_LANG.home.contact.form.consentBefore }}<a href="{% safe_href: URLS.privacy %}" class="consent-link">{{ CURRENT_LANG.home.contact.form.consentLink }}</a>{{ CURRENT_LANG.home.contact.form.consentAfter }}

@@ -1,0 +1,31 @@
+<section class="card">
+  <h1>Enter login code</h1>
+  <p class="muted">We sent a 6-digit code to your registered email. It expires in a few minutes.</p>
+
+  {% if: ERROR %}
+  <div class="alert" role="alert">{{ ERROR }}</div>
+  {% endif %}
+
+  <form method="POST" action="{{ BASE }}/otp" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ CSRF }}">
+
+    <label class="field">
+      <span class="field-label">Code</span>
+      <input class="field-input field-code"
+             type="text"
+             name="code"
+             inputmode="numeric"
+             pattern="[0-9]*"
+             autocomplete="one-time-code"
+             autofocus
+             required
+             maxlength="10">
+    </label>
+
+    <button class="btn btn-primary" type="submit">Verify</button>
+  </form>
+
+  <p class="muted small">
+    <a href="{{ BASE }}/login">Back to sign in</a>
+  </p>
+</section>

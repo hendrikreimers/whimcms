@@ -1,0 +1,8 @@
+<fieldset class="field-list" data-list-root data-list-name="{{ NAME }}">
+  <legend class="field-label">{{ LABEL }}</legend>
+  <div class="field-list-items" data-list-items>
+    {% html: ITEMS_HTML %}
+  </div>
+  <template data-list-template>{% html: TEMPLATE_HTML %}</template>
+  <button type="button" class="btn btn-ghost btn-sm" data-list-add>+ Add item</button>
+</fieldset>

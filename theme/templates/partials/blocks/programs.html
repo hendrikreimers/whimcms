@@ -1,0 +1,47 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: programs — service / product cards with image, title, body, CTA.
+   Renders 1-N items; CSS controls the grid response. Themes that need a
+   different aspect (e.g. personal at 3:4 portrait) ship their own
+   variant — see programs-personal.html.
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { title, body, image?, imageAlt?, ctaLabel?, ctaHref? } #}
+<section class="block block-programs"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {# Layout (theme-core.css, the canonical grid for this block):
+         <720: 1-col, container padding 24px → card = 100vw − 48px
+         ≥720: 3-col, container max-width 1152px, padding 32px,
+               gap 24px (var(--space-5))
+               → card = (min(100vw, 1152px) − 112px) / 3
+       Aspect-ratio 4:3 (landscape). Display widths × DPR(1, 2):
+         Mobile <720: max 720−48 = 672 → ×2 = 1344
+         Desktop @1920 (clipped to 1152): (1152−112) / 3 = 347 → ×2 = 694
+       Stufen: 480w (small mobile, desktop 1×), 768w (desktop 2×),
+               1280w (large-mobile 2× edge). #}
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <ul class="block-programs-grid reveal">
+      {% for: attrs.items, as: 'item' %}
+      <li class="block-programs-item">
+        <article class="block-programs-card">
+          {% if: item.image %}
+          <div class="block-programs-media">
+            <img srcset="{% image: item.image, width: 480, height: 360 %} 480w, {% image: item.image, width: 768, height: 576 %} 768w, {% image: item.image, width: 1280, height: 960 %} 1280w" sizes="(min-width: 720px) calc((min(100vw, 1152px) - 112px) / 3), calc(100vw - 48px)" src="{% image: item.image, width: 768, height: 576 %}" alt="{{ item.imageAlt }}" width="768" height="576" loading="lazy" decoding="async" />
+          </div>
+          {% endif %}
+          <div class="block-programs-body">
+            <h3 class="block-programs-title">{{ item.title }}</h3>
+            <p class="block-programs-text">{{ item.body }}</p>
+            {% if: item.ctaLabel %}
+            <a class="block-programs-cta" href="{% safe_href: item.ctaHref %}">{{ item.ctaLabel }}{% include: 'partials/icon-arrow-out' %}</a>
+            {% endif %}
+          </div>
+        </article>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

@@ -1,0 +1,94 @@
+# ============================================================
+# WhimCMS — test deployment .htaccess
+# ------------------------------------------------------------
+# Used while testing under a subfolder (e.g. /site). The parent
+# .htaccess on the webspace already supplies the strict security
+# headers, so this file stays minimal and only handles what's
+# deployment-specific: front-controller routing, blocking the
+# PHP-only directories, and a deployment-scoped CSP override.
+#
+# For independent / production deployment, see _htaccess_production.
+# ============================================================
+
+RewriteEngine On
+
+Options -Indexes -MultiViews
+
+# Opt out of any parent-level ErrorDocument overrides — our PHP layer
+# emits its own 4xx/5xx response bodies (debug-friendly trace in dev,
+# minimal HTML page in production) and we want those to reach the client
+# instead of being replaced by the host's generic error page. "default"
+# resets to Apache's built-in behaviour: pass through whatever the
+# handler (PHP) wrote, with no substitution.
+ErrorDocument 400 default
+ErrorDocument 403 default
+ErrorDocument 404 default
+ErrorDocument 413 default
+ErrorDocument 500 default
+
+# ----- Image-server endpoint -----
+# Cropped variants live at /img-c/<basename>-<hash>.<ext>. Files are
+# written only by the {% image %} template directive at render time and
+# served read-only by Image\CroppedServer. Routed explicitly so the
+# dispatcher's image-c branch is reached even if a real /img-c/ directory
+# ever exists at the document root.
+RewriteRule ^img-c/ index.php [L]
+
+# ----- Block PHP-only / source-only paths (rewrite to PHP → 404, no info leak) -----
+# Both the legacy root-level paths AND the theme/* nested variants
+# are caught here. With paths.theme = '.' the templates/, i18n/ etc.
+# live at root and the first rule applies; with paths.theme = 'theme'
+# they sit under theme/ and the second rule catches them. Defense-in-
+# depth: each of these dirs also ships its own deny-all .htaccess.
+#
+# `content` is in the first list because page Markdown sources are
+# author-only (rendered through PageLoader, never served raw).
+#
+# `<dir>.<suffix>` rules block the sibling-bundle convention used for
+# theme activation (`theme.example`, `content.example`, `config.example`,
+# `assets.example`, …). These are dev-time staging directories that
+# should never be servable in production even if they accidentally
+# get deployed. Bare `assets/` (raster image source for the image
+# server) stays servable — only suffixed variants are blocked.
+RewriteRule ^(lib|templates|i18n|var|logs|config|content)(/|$) index.php [L]
+RewriteRule ^(config|content|theme|assets)\.[a-zA-Z0-9_-]+(/|$) index.php [L]
+RewriteRule ^theme/(templates|i18n|content)(/|$) index.php [L]
+RewriteRule ^theme\.[a-zA-Z0-9_-]+/(templates|i18n|content)(/|$) index.php [L]
+
+# Block any path containing a `_`-prefixed segment (e.g. /_docs/, /_audits/).
+# Defence-in-depth — INSTALL.md instructs operators to skip `_*` files when
+# uploading (those are dev-only: docs, alternative htaccess variants), but
+# if a directory like _docs/ accidentally lands on the webspace, this
+# returns the same privacy-preserving 404 from PHP as the other sensitive-
+# directory rules above instead of leaking source content.
+RewriteRule (^|/)_ index.php [L]
+
+# ----- Real static files served directly -----
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ----- Front controller for everything else -----
+RewriteRule ^ index.php [L]
+
+# ----- Defence-in-depth file pattern denials -----
+<FilesMatch "^([_.])">
+    Require all denied
+</FilesMatch>
+<FilesMatch "\.(env|key|sample|bak|inc\.php|md)$">
+    Require all denied
+</FilesMatch>
+
+# ----- Project-scoped CSP override (parent .htaccess sets the broader
+# set; this one is strict because the site emits no inline assets).
+#
+# style-src and font-src include Google Fonts (fonts.googleapis.com /
+# fonts.gstatic.com) so the bundled showcase themes can load their
+# typefaces from Google's CDN. Privacy trade-off: every page request
+# leaks visitor IP + UA to Google. For a real deployment, prefer self-
+# hosting the fonts under /fonts and shrinking style-src/font-src back
+# to 'self' (see _htaccess_production for the strict variant).
+<IfModule mod_headers.c>
+    Header set Content-Security-Policy "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; media-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+</IfModule>

@@ -1,0 +1,9 @@
+{
+  "label": "Contact",
+  "fields": {
+    "eyebrow":       { "type": "text" },
+    "title":         { "type": "text" },
+    "lede":          { "type": "textarea" },
+    "directHeading": { "type": "text" }
+  }
+}

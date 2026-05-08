@@ -1,0 +1,10 @@
+{
+  "label": "Prose",
+  "description": "Long-form Markdown body section.",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "title":   { "type": "text" },
+    "lede":    { "type": "textarea" }
+  },
+  "body": { "type": "markdown", "label": "Body (Markdown — paragraphs, ## headings, **bold**, *em*, lists, links)" }
+}

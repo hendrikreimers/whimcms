@@ -1,0 +1,18 @@
+<div class="field field-md-wrap">
+  <span class="field-label">{{ LABEL }}</span>
+  <div class="field-md-toolbar" data-md-toolbar>
+    <button type="button" class="md-btn" data-md-cmd="bold" title="Bold (**text**)"><strong>B</strong></button>
+    <button type="button" class="md-btn" data-md-cmd="italic" title="Italic (*text*)"><em>I</em></button>
+    <span class="md-sep" aria-hidden="true"></span>
+    <button type="button" class="md-btn" data-md-cmd="h2" title="Heading 2 (## …)">H2</button>
+    <button type="button" class="md-btn" data-md-cmd="h3" title="Heading 3 (### …)">H3</button>
+    <button type="button" class="md-btn" data-md-cmd="h4" title="Heading 4 (#### …)">H4</button>
+    <span class="md-sep" aria-hidden="true"></span>
+    <button type="button" class="md-btn" data-md-cmd="ul" title="Unordered list (- …)">• List</button>
+    <button type="button" class="md-btn" data-md-cmd="link" title="Link [text](href)">🔗</button>
+    <button type="button" class="md-btn" data-md-cmd="code" title="Inline code (`code`)">&lt;/&gt;</button>
+    <button type="button" class="md-btn" data-md-cmd="codeblock" title="Fenced code block (```)">{ }</button>
+  </div>
+  <textarea class="field-input field-md" data-md-target name="{{ NAME }}" rows="8">{{ VALUE }}</textarea>
+  <span class="field-help">Safe-subset Markdown — supports <code>**bold**</code>, <code>*em*</code>, <code>## H2</code>/<code>### H3</code>/<code>#### H4</code>, lists with <code>- </code>, <code>[link](href)</code>, <code>`code`</code>, fenced <code>```</code> blocks.</span>
+</div>

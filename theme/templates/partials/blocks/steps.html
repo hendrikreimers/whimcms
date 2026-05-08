@@ -1,0 +1,28 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: steps — numbered process / install steps.
+   Uses an ordered list so screen readers read the order.
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { title, body } #}
+<section class="block block-steps"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    {# Markers are rendered by CSS via counter() on the <ol>. The
+       ordered list itself carries the semantic numbering for screen
+       readers, so the visible "01 / 02 / …" badge is decorative. #}
+    <ol class="block-steps-list reveal">
+      {% for: attrs.items, as: 'step' %}
+      <li class="block-steps-item">
+        <div class="block-steps-body">
+          <h3 class="block-steps-title">{{ step.title }}</h3>
+          <p class="block-steps-text">{{ step.body }}</p>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>

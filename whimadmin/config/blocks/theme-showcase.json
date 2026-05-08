@@ -1,0 +1,21 @@
+{
+  "label": "Theme showcase",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "title":   { "type": "text" },
+    "lede":    { "type": "textarea" },
+    "items": {
+      "type": "list",
+      "of": {
+        "type": "map",
+        "shape": {
+          "name":     { "type": "text" },
+          "tagline":  { "type": "text" },
+          "href":     { "type": "link" },
+          "image":    { "type": "image" },
+          "imageAlt": { "type": "text" }
+        }
+      }
+    }
+  }
+}

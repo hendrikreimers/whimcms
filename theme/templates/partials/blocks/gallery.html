@@ -1,0 +1,60 @@
+{@ block
+  optional: id eyebrow items
+@}
+{# Image gallery. Auto-fits 3-5 tiles per row depending on viewport;
+   any item with `lightbox: true` opens a fullscreen overlay on click.
+
+   Expects local attrs:
+     { eyebrow?, id?, items: [ { path, alt, caption?, lightbox? } ] }
+
+       eyebrow   Optional small caption above the grid.
+       id        Optional grouping key for the lightbox so multiple
+                 galleries on the same page navigate independently.
+       items     Each item:
+         path     /assets/-rooted asset path (e.g. "/assets/photos/g1.jpg")
+         alt      Required for accessibility; "" for decorative.
+         caption  Optional, shown in the lightbox when active.
+         lightbox When truthy the tile becomes a clickable lightbox
+                  trigger; otherwise it's a static thumbnail. #}
+<section class="gallery-section"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {# Shared partial — aspect varies per theme, so we use scaleWithin
+       (`maxWidth`) and let CSS `object-fit: cover` crop visually:
+         theme-core:    4-col ≥720, gap 12px, aspect 4:3
+         theme-personal: 2-col ≥720, gap 24px, aspect 3:2
+         theme-business / trainer / dev: similar 3-4 col grids
+       Largest tile across themes (theme-personal 2-col @1920, container
+       1280): (1280 − 96 − 24) / 2 = 580 → ×2 = 1160 → 1280w stage covers.
+       theme-core 4-col @1920 (container 1152): (1152 − 64 − 36) / 4 = 263
+       → ×2 = 526 → 768w stage covers.
+       Stufen: 480w (small mobile / theme-core 4-col), 768w (desktop 2×
+               most themes), 1280w (theme-personal 2-col 2× edge).
+       sizes uses theme-core's 25vw / 50vw approximation; under-specs
+       theme-personal slightly but the 1280w stage is still selected at
+       DPR 2 for typical desktops. #}
+    {% if: attrs.eyebrow %}
+    <div class="reveal">
+      <span class="eyebrow eyebrow-spaced-32">{{ attrs.eyebrow }}</span>
+    </div>
+    {% endif %}
+    <div class="gallery-grid reveal" {% if: attrs.id %}data-lightbox-group="{{ attrs.id }}"{% endif %}>
+      {% for: attrs.items, as: 'item' %}
+        {% if: item.lightbox %}
+        <a class="gallery-tile gallery-tile-lightbox"
+           href="{% image: item.path, maxWidth: 1920 %}?v={{ CACHE_BUSTER }}"
+           data-lightbox="1"
+           data-caption="{{ item.caption }}"
+           data-full="{% image: item.path, maxWidth: 1920 %}?v={{ CACHE_BUSTER }}">
+          <img srcset="{% image: item.path, maxWidth: 480 %} 480w, {% image: item.path, maxWidth: 768 %} 768w, {% image: item.path, maxWidth: 1280 %} 1280w" sizes="(max-width: 720px) 50vw, 25vw" src="{% image: item.path, maxWidth: 768 %}" alt="{{ item.alt }}" loading="lazy" decoding="async" />
+        </a>
+        {% endif %}
+        {% if: !item.lightbox %}
+        <div class="gallery-tile">
+          <img srcset="{% image: item.path, maxWidth: 480 %} 480w, {% image: item.path, maxWidth: 768 %} 768w, {% image: item.path, maxWidth: 1280 %} 1280w" sizes="(max-width: 720px) 50vw, 25vw" src="{% image: item.path, maxWidth: 768 %}" alt="{{ item.alt }}" loading="lazy" decoding="async" />
+          {% if: item.caption %}<span class="gallery-caption">{{ item.caption }}</span>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</section>

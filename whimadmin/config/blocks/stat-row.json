@@ -1,0 +1,18 @@
+{
+  "label": "Stat row",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "title":   { "type": "text" },
+    "items": {
+      "type": "list",
+      "label": "Stats",
+      "of": {
+        "type": "map",
+        "shape": {
+          "value": { "type": "text" },
+          "label": { "type": "text" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+<form class="contact-form" data-contact-form method="post" action="{{ CURRENT_PAGE_URL }}#contact" novalidate
+      data-captcha-salt="{{ CAPTCHA.salt }}"
+      data-captcha-difficulty="{{ CAPTCHA.difficulty }}"
+      data-captcha-enabled="{% if: CAPTCHA.enabled %}1{% endif %}">
+  <input type="hidden" name="_token" value="{{ FORM_TOKEN }}" />
+  <input type="hidden" name="_captcha_token" value="{{ CAPTCHA.token }}" />
+  <input type="hidden" name="_captcha_nonce" value="" data-captcha-nonce />
+
+  {# Honeypot — hidden from humans via .visually-hidden, autocomplete off,
+     tabindex out of order. The `name` is derived per-installation from the
+     application secret (see H42\Honeypot::deriveFieldName) so bot
+     dictionaries of common honeypot names get no signal. The label is
+     aria-hidden, so the random-looking text is invisible to screen readers
+     and keyboard users alike. #}
+  <div class="visually-hidden" aria-hidden="true">
+    <label for="cf-{{ HONEYPOT_FIELD }}">{{ HONEYPOT_FIELD }}</label>
+    <input id="cf-{{ HONEYPOT_FIELD }}" type="text" name="{{ HONEYPOT_FIELD }}" tabindex="-1" autocomplete="off" />
+  </div>
+
+  {# Live region — fetch-mode JS injects errors here without losing the
+     screen-reader announcement. role=alert + aria-live=polite covers
+     both browsers that speak role-changes and ones that need explicit
+     polite. The element exists even when no global error so JS doesn't
+     have to create it on the fly. #}
+  <div class="contact-form-error{% if: !FORM_GLOBAL_ERROR %} contact-form-error-empty{% endif %}"
+       role="alert" aria-live="polite" data-form-global-region>
+    {% if: FORM_GLOBAL_ERROR == 'token' %}{{ CURRENT_LANG.home.contact.form.globalErrors.token }}{% endif %}
+    {% if: FORM_GLOBAL_ERROR == 'rate_limit' %}{{ CURRENT_LANG.home.contact.form.globalErrors.rate_limit }}{% endif %}
+    {% if: FORM_GLOBAL_ERROR == 'blocked' %}{{ CURRENT_LANG.home.contact.form.globalErrors.blocked }}{% endif %}
+    {% if: FORM_GLOBAL_ERROR == 'mail_failed' %}{{ CURRENT_LANG.home.contact.form.globalErrors.mail_failed }}{% endif %}
+    {% if: FORM_GLOBAL_ERROR == 'captcha' %}{{ CURRENT_LANG.home.contact.form.globalErrors.captcha }}{% endif %}
+  </div>
+
+  <div class="field-row">
+    <div class="field{% if: FORM_ERRORS.name %} field-error{% endif %}">
+      <label for="cf-name">{{ CURRENT_LANG.home.contact.form.name }}</label>
+      <input id="cf-name" name="name" type="text" autocomplete="name" required maxlength="80" value="{{ FORM_VALUES.name }}" />
+      {% if: FORM_ERRORS.name %}<span class="field-error-msg">{% include: 'partials/contact/error', attrs: FORM_ERRORS.name %}</span>{% endif %}
+    </div>
+    <div class="field{% if: FORM_ERRORS.email %} field-error{% endif %}">
+      <label for="cf-email">{{ CURRENT_LANG.home.contact.form.email }}</label>
+      <input id="cf-email" name="email" type="email" autocomplete="email" required maxlength="200" value="{{ FORM_VALUES.email }}" />
+      {% if: FORM_ERRORS.email %}<span class="field-error-msg">{% include: 'partials/contact/error', attrs: FORM_ERRORS.email %}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="field{% if: FORM_ERRORS.message %} field-error{% endif %}">
+    <label for="cf-msg">{{ CURRENT_LANG.home.contact.form.message }}</label>
+    <textarea id="cf-msg" name="message" rows="5" required maxlength="5000">{{ FORM_VALUES.message }}</textarea>
+    {% if: FORM_ERRORS.message %}<span class="field-error-msg">{% include: 'partials/contact/error', attrs: FORM_ERRORS.message %}</span>{% endif %}
+  </div>
+
+  <div class="field-consent{% if: FORM_ERRORS.consent %} field-error{% endif %}">
+    <label class="consent-label">
+      <input type="checkbox" name="consent" value="1" required{% if: FORM_VALUES.consent %} checked{% endif %} />
+      <span class="consent-text">{% include: 'partials/contact/consent-text' %}</span>
+    </label>
+    {% if: FORM_ERRORS.consent %}<span class="field-error-msg">{% include: 'partials/contact/error', attrs: FORM_ERRORS.consent %}</span>{% endif %}
+  </div>
+
+  <button type="submit" class="btn btn-primary contact-form-submit">
+    {{ CURRENT_LANG.home.contact.form.submit }}
+    {% include: 'partials/icon-arrow-out' %}
+  </button>
+
+  {% if: FORM_SENT %}
+  <div class="contact-form-sent" data-contact-sent role="status" aria-live="polite" tabindex="-1">{{ CURRENT_LANG.home.contact.form.sent }}</div>
+  {% endif %}
+</form>

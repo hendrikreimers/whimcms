@@ -1,0 +1,32 @@
+<section class="card card-wide">
+  <header class="card-header">
+    <h1>Asset Recycler</h1>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/assets">← Browse assets</a>
+    </div>
+  </header>
+
+  {% if: NOTICE %}<div class="notice" role="status">{{ NOTICE }}</div>{% endif %}
+
+  <p class="muted">Files moved here are no longer reachable via the public site (a deny-all <code>.htaccess</code> sits in the recycler). Empty the recycler to reclaim disk space.</p>
+
+  <table class="page-list">
+    <thead><tr><th>Name</th><th>Size</th><th>Deleted</th></tr></thead>
+    <tbody>
+      {% for: ENTRIES, as: 'e' %}
+      <tr>
+        <td>{{ e.name }}</td>
+        <td class="muted">{{ e.size_human }}</td>
+        <td class="muted">{{ e.mtime_human }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="POST" action="{{ BASE }}/assets/recycler/purge">
+    <input type="hidden" name="_csrf" value="{{ CSRF }}">
+    <div class="actions">
+      <button class="btn btn-ghost danger" type="submit" data-confirm="Permanently delete every file in the asset recycler? This cannot be undone.">Empty recycler</button>
+    </div>
+  </form>
+</section>

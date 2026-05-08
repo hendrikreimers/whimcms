@@ -1,0 +1,25 @@
+{@ block
+  optional: id items
+@}
+{# Block: legal-sections — flat list of {heading, body} pairs, used by
+   imprint / privacy / terms.
+
+   Attribute contract:
+     optional: items — list of maps with shape { heading, body }.
+
+   This is the 1:1 migration target of the legacy `partials/legal/sections`,
+   so layout / spacing remains identical. A future variant block (one
+   block per section, full Markdown body) can be introduced alongside
+   without breaking pages that already use this one. #}
+<section{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    <div class="legal">
+      {% for: attrs.items, as: 's' %}
+      <div class="reveal legal-section">
+        <h2 class="legal-h">{{ s.heading }}</h2>
+        <p class="legal-p">{{ s.body }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

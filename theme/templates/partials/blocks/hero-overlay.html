@@ -1,0 +1,42 @@
+{@ block
+  required: title
+  optional: id eyebrow lede image imageAlt focusX focusY ctaPrimary ctaPrimaryHref ctaSecondary ctaSecondaryHref
+@}
+{# Block: hero-overlay — full-bleed cinematic hero used by the trainer
+   and dev demo themes.
+
+   Expects local attrs:
+     { title, eyebrow?, lede?, image?, imageAlt?, focusX?, focusY?,
+       ctaPrimary?, ctaPrimaryHref?, ctaSecondary?, ctaSecondaryHref? } #}
+<section class="block block-hero{% if: attrs.image %} block-hero-image{% endif %}"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  {# Layout (theme-trainer.css / theme-dev.css): .block-hero-media is
+     `position: absolute; inset: 0` — fills 100vw, no container cap.
+     Trainer paints a vertical gradient on top; dev sets opacity 0.4.
+     Aspect-ratio 16:9 cinematic. Display widths × DPR(1, 2):
+       Mobile <720: 100vw → up to 720 × 2 = 1440 (edge)
+       Desktop:     100vw → up to 1920 × 2 = 3840 (4k, ignored)
+     Stufen: 768w (mobile 2× ≤480), 1280w (desktop 1× / mobile 2× ≤640),
+             1920w (desktop 2× full-HD). #}
+  {% if: attrs.image %}
+  <div class="block-hero-media" aria-hidden="true">
+    <img
+      srcset="{% image: attrs.image, width: 768, height: 432, focusX: attrs.focusX, focusY: attrs.focusY %} 768w, {% image: attrs.image, width: 1280, height: 720, focusX: attrs.focusX, focusY: attrs.focusY %} 1280w, {% image: attrs.image, width: 1920, height: 1080, focusX: attrs.focusX, focusY: attrs.focusY %} 1920w"
+      sizes="100vw"
+      src="{% image: attrs.image, width: 1280, height: 720, focusX: attrs.focusX, focusY: attrs.focusY %}"
+      alt="{{ attrs.imageAlt }}"
+      width="1920" height="1080"
+      loading="eager" />
+  </div>
+  {% endif %}
+  <div class="container block-hero-inner">
+    {% if: attrs.eyebrow %}<span class="eyebrow">{{ attrs.eyebrow }}</span>{% endif %}
+    <h1 class="block-hero-title">{!! attrs.title !!}</h1>
+    {% if: attrs.lede %}<p class="block-hero-lede">{{ attrs.lede }}</p>{% endif %}
+    {% if: attrs.ctaPrimary %}
+    <div class="block-hero-cta">
+      <a class="btn btn-primary" href="{% safe_href: attrs.ctaPrimaryHref %}">{{ attrs.ctaPrimary }}{% include: 'partials/icon-arrow-out' %}</a>
+      {% if: attrs.ctaSecondary %}<a class="btn btn-ghost" href="{% safe_href: attrs.ctaSecondaryHref %}">{{ attrs.ctaSecondary }}</a>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>

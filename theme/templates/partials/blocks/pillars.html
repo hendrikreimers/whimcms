@@ -1,0 +1,23 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: pillars — N-up grid of value props / features (text-only).
+   For icon cards see `feature-grid`.
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { title, body }  #}
+<section class="block block-pillars"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <ul class="block-pillars-grid reveal">
+      {% for: attrs.items, as: 'item' %}
+      <li class="block-pillars-item">
+        <h3 class="block-pillars-item-title">{{ item.title }}</h3>
+        <p class="block-pillars-item-body">{{ item.body }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

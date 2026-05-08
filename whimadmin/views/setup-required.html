@@ -1,0 +1,18 @@
+<section class="card">
+  <h1>Setup required</h1>
+  <p>This installation has no user account yet.</p>
+  <p>
+    A one-time setup token has been written to a private file inside
+    your installation:
+  </p>
+  <p class="muted"><code>whimadmin/var/state/setup-token.txt</code></p>
+  <p>
+    Open that file via SSH / SFTP. It contains the URL to visit (with
+    the token inline) and the expiry time. The file (and the matching
+    HMAC record) are deleted automatically once setup completes.
+  </p>
+  <p class="small muted">
+    If the token has expired, simply reload this page once — a fresh
+    token will be generated and the file rewritten.
+  </p>
+</section>

@@ -1,0 +1,15 @@
+{
+  "label": "Legal sections (flat list)",
+  "fields": {
+    "items": {
+      "type": "list",
+      "of": {
+        "type": "map",
+        "shape": {
+          "heading": { "type": "text" },
+          "body":    { "type": "textarea" }
+        }
+      }
+    }
+  }
+}

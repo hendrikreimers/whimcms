@@ -1,0 +1,46 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: pricing — tier cards. One item per tier.
+   `featured: true` highlights the recommended tier.
+   `features` is a list of strings (each a checked bullet).
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { name, price, period?, features?, ctaLabel?, ctaHref?, featured? } #}
+<section class="block block-pricing"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <ul class="block-pricing-grid reveal">
+      {% for: attrs.items, as: 'tier' %}
+      <li class="block-pricing-item{% if: tier.featured %} block-pricing-item-featured{% endif %}">
+        <article class="block-pricing-card">
+          <header class="block-pricing-head">
+            <h3 class="block-pricing-name">{{ tier.name }}</h3>
+            <div class="block-pricing-price">
+              <span class="block-pricing-amount">{{ tier.price }}</span>
+              {% if: tier.period %}<span class="block-pricing-period">{{ tier.period }}</span>{% endif %}
+            </div>
+          </header>
+          {# Per-tier features. The AttributeParser does not allow nested
+             lists inside list-item maps (depth-1 cap), so each feature
+             is its own flat key feat1..feat6. The partial renders only
+             the slots that are present. #}
+          <ul class="block-pricing-features">
+            {% if: tier.feat1 %}<li class="block-pricing-feature"><span class="block-pricing-feature-mark" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: 'check' } %}</span><span>{{ tier.feat1 }}</span></li>{% endif %}
+            {% if: tier.feat2 %}<li class="block-pricing-feature"><span class="block-pricing-feature-mark" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: 'check' } %}</span><span>{{ tier.feat2 }}</span></li>{% endif %}
+            {% if: tier.feat3 %}<li class="block-pricing-feature"><span class="block-pricing-feature-mark" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: 'check' } %}</span><span>{{ tier.feat3 }}</span></li>{% endif %}
+            {% if: tier.feat4 %}<li class="block-pricing-feature"><span class="block-pricing-feature-mark" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: 'check' } %}</span><span>{{ tier.feat4 }}</span></li>{% endif %}
+            {% if: tier.feat5 %}<li class="block-pricing-feature"><span class="block-pricing-feature-mark" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: 'check' } %}</span><span>{{ tier.feat5 }}</span></li>{% endif %}
+            {% if: tier.feat6 %}<li class="block-pricing-feature"><span class="block-pricing-feature-mark" aria-hidden="true">{% include: 'partials/icons/glyph', attrs: { name: 'check' } %}</span><span>{{ tier.feat6 }}</span></li>{% endif %}
+          </ul>
+          {% if: tier.ctaLabel %}
+          <a class="btn{% if: tier.featured %} btn-primary{% endif %}{% if: !tier.featured %} btn-ghost{% endif %} block-pricing-cta" href="{% safe_href: tier.ctaHref %}">{{ tier.ctaLabel }}</a>
+          {% endif %}
+        </article>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

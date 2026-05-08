@@ -1,0 +1,21 @@
+{
+  "label": "Voices / testimonials",
+  "fields": {
+    "eyebrow": { "type": "text" },
+    "title":   { "type": "text" },
+    "lede":    { "type": "textarea" },
+    "items": {
+      "type": "list",
+      "of": {
+        "type": "map",
+        "shape": {
+          "quote":    { "type": "textarea" },
+          "name":     { "type": "text" },
+          "role":     { "type": "text" },
+          "image":    { "type": "image" },
+          "imageAlt": { "type": "text" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# Defence-in-depth: page content (.md sources) is read by PHP only,
+# never served over HTTP directly. Same posture as /lib, /templates, /i18n.
+
+Require all denied

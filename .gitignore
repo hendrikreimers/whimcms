@@ -1,0 +1,23 @@
+# ============================================================
+# WhimCMS — .gitignore
+# ============================================================
+
+# Runtime state: per-request caches, captcha-token marks,
+# rate-limit buckets, mail audit log. Regenerated on demand.
+var/
+
+# Internal hardening notes / per-session audit reports.
+# Not part of the public CMS distribution.
+_docs/audits/
+
+# Working scratch files (convention: .tmp_*.<ext> in project root).
+.tmp_*
+
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+*.bak
+*~
+*.swp
+*.swo
+.idea

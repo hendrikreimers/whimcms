@@ -1,0 +1,31 @@
+{@ block
+  required: heading
+  optional: id
+@}
+{# Block: legal-section (singular) — one heading + Markdown-rendered body.
+
+   Sister of `legal-sections` (plural, items list). Use this one when the
+   section's text genuinely needs Markdown — paragraphs, line breaks,
+   lists, **emphasis**. A legal page becomes a stack of `legal-section`
+   blocks; each one its own `<section>` wrapper so the existing
+   .legal / .legal-section / .legal-h CSS continues to apply unchanged.
+
+   Attribute contract:
+     required: heading
+     (no optional attrs today; body is the prose, in Markdown.)
+
+   `body` is pre-rendered HTML from the Markdown renderer's safe subset
+   and emitted via `{!! body !!}`. Wrapper is a <div class="legal-p">
+   rather than <p>, because the Markdown renderer emits its own block
+   elements (<p>, <h2>, <ul>) that cannot legally nest inside <p>. CSS
+   class is unchanged. #}
+<section{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    <div class="legal">
+      <div class="reveal legal-section">
+        <h2 class="legal-h">{{ attrs.heading }}</h2>
+        <div class="legal-p">{% html: body %}</div>
+      </div>
+    </div>
+  </div>
+</section>

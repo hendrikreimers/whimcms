@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="{{ LANG }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ META.title }}</title>
+  <meta name="description" content="{{ META.description }}" />
+
+  {# Robots — when seo.indexable is false we emit a hard noindex meta
+     in addition to the X-Robots-Tag header so even cached / archived
+     pages stay out of search. Remove the indexable=false flip on launch. #}
+  {% if: !SEO.indexable %}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />{% endif %}
+
+  <link rel="canonical" href="{{ SEO.canonical }}" />
+
+  {# hreflang alternates — one per supported language plus x-default. #}
+  {% for: SEO.alternates, as: 'alt' %}
+  <link rel="alternate" hreflang="{{ alt.lang }}" href="{{ alt.url }}" />
+  {% endfor %}
+  {% if: MULTI_LANG %}<link rel="alternate" hreflang="x-default" href="{{ SEO.xDefault }}" />{% endif %}
+
+  {# Open Graph — for link previews on social platforms. #}
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content="{{ META.title }}" />
+  <meta property="og:description" content="{{ META.description }}" />
+  <meta property="og:url"         content="{{ SEO.canonical }}" />
+  {% if: SEO.ogImage %}<meta property="og:image" content="{{ SEO.ogImage }}" />{% endif %}
+  {% if: SEO.siteName %}<meta property="og:site_name" content="{{ SEO.siteName }}" />{% endif %}
+  <meta property="og:locale"      content="{{ SEO.ogLocale }}" />
+
+  {# Twitter card — uses summary_large_image when an OG image is set. #}
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="{{ META.title }}" />
+  <meta name="twitter:description" content="{{ META.description }}" />
+  {% if: SEO.ogImage %}<meta name="twitter:image" content="{{ SEO.ogImage }}" />{% endif %}
+  {% if: SEO.twitterHandle %}<meta name="twitter:site" content="{{ SEO.twitterHandle }}" />{% endif %}
+
+  <link rel="icon" type="image/svg+xml" href="{{ BASE }}{{ THEME_URL }}/assets/favicon.svg" />
+
+  {# Google Fonts — Inter is the system-font of the core theme. The
+     CSP allowance for fonts.googleapis.com / fonts.gstatic.com is in
+     .htaccess; for a privacy-conscious deployment, self-host instead. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
+
+  <link rel="stylesheet" href="{{ BASE }}{{ THEME_URL }}/styles/base.css?v={{ CACHE_BUSTER }}" />
+  <link rel="stylesheet" href="{{ BASE }}{{ THEME_URL }}/styles/theme-core.css?v={{ CACHE_BUSTER }}" />
+
+  <script type="module" src="{{ BASE }}{{ THEME_URL }}/js/main.js?v={{ CACHE_BUSTER }}"></script>
+
+  {# Structured data — encoded so the JSON contains no literal HTML-
+     special characters and survives the engine's raw-output sanitiser. #}
+  <script type="application/ld+json">{!! SEO.ldJson !!}</script>
+</head>
+<body class="theme theme-core" data-page="{{ PAGE }}">
+  <a class="skip-link" href="#main">{{ CURRENT_LANG.a11y.skipLink }}</a>
+  {% include: 'partials/nav-core' %}
+  <main id="main">
+    {# Block-based path: pages with a content/<lang>/<slug>.md file ship
+       their composition through the {% blocks %} directive. Pages without
+       one fall through to templates/pages/<slug>.html. #}
+    {% if: BLOCKS %}{% blocks %}{% endif %}
+    {% if: !BLOCKS %}{% include: PAGE_TEMPLATE %}{% endif %}
+  </main>
+  {% include: 'partials/footer-core' %}
+</body>
+</html>

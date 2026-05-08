@@ -1,0 +1,23 @@
+{@ block
+  required: items
+  optional: id eyebrow title
+@}
+{# Block: stat-row — strip of headline stats (value + label).
+   Useful for "100k users", "9.8s avg load", etc.
+
+   Expects local attrs:
+     { items, eyebrow?, title? }
+       items: list of { value, label } #}
+<section class="block block-stat-row"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <dl class="block-stat-row-grid reveal">
+      {% for: attrs.items, as: 'item' %}
+      <div class="block-stat-row-item">
+        <dt class="block-stat-row-label">{{ item.label }}</dt>
+        <dd class="block-stat-row-value">{{ item.value }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </div>
+</section>

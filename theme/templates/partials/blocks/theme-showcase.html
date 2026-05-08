@@ -1,0 +1,41 @@
+{@ block
+  required: items
+  optional: id eyebrow title lede
+@}
+{# Block: theme-showcase — grid of demo-theme cards on the core landing.
+   Each item links to a demo theme. Used only on the core /home page.
+
+   Expects local attrs:
+     { items, eyebrow?, title?, lede? }
+       items: list of { name, tagline, href, image, imageAlt? } #}
+<section class="block block-theme-showcase"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {# Layout (theme-core.css, only theme using this block):
+         <720: 1-col, container padding 24px → card = 100vw − 48px
+         ≥720: 2-col, container max-width 1152px, padding 32px,
+               gap 24px (var(--space-5))
+               → card = (min(100vw, 1152px) − 88px) / 2
+       Aspect-ratio 16:9 (cinematic). Display widths × DPR(1, 2):
+         Mobile <720: max 720−48 = 672 → ×2 = 1344
+         Desktop @1920 (clipped to 1152): (1152−88) / 2 = 532 → ×2 = 1064
+       Stufen: 480w (small mobile, desktop 1×), 768w (mobile 1× / desktop
+               2× small), 1280w (desktop 2× full / mobile 2× edge). #}
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+    <ul class="block-theme-showcase-grid reveal">
+      {% for: attrs.items, as: 'theme' %}
+      <li class="block-theme-showcase-item">
+        <a class="block-theme-showcase-card" href="{% safe_href: theme.href %}">
+          <span class="block-theme-showcase-media">
+            <img srcset="{% image: theme.image, width: 480, height: 270 %} 480w, {% image: theme.image, width: 768, height: 432 %} 768w, {% image: theme.image, width: 1280, height: 720 %} 1280w" sizes="(min-width: 720px) calc((min(100vw, 1152px) - 88px) / 2), calc(100vw - 48px)" src="{% image: theme.image, width: 768, height: 432 %}" alt="{{ theme.imageAlt }}" width="768" height="432" loading="lazy" decoding="async" />
+          </span>
+          <span class="block-theme-showcase-body">
+            <span class="block-theme-showcase-name">{{ theme.name }}</span>
+            <span class="block-theme-showcase-tagline">{{ theme.tagline }}</span>
+            <span class="block-theme-showcase-cta" aria-hidden="true">{% include: 'partials/icon-arrow-out' %}</span>
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>

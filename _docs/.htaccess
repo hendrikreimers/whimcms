@@ -1,0 +1,5 @@
+# Defence-in-depth: documentation is for the maintainer, not visitors.
+# The root .htaccess already denies *.md via FilesMatch and disables
+# Indexes; this is a belt for the braces.
+
+Require all denied

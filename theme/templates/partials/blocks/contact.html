@@ -1,0 +1,34 @@
+{@ block
+  optional: id eyebrow title lede directHeading
+@}
+{# Block: contact — section with the live contact form on one side and
+   optional direct contact info (obfuscated email) on the other.
+
+   When `contact.enabled = false` the form is omitted entirely; only the
+   direct-contact column survives. The block is otherwise inert — see
+   ContactController + Mailer for the POST pipeline.
+
+   Expects local attrs:
+     { eyebrow?, title?, lede?, directHeading?, directEmail? } #}
+<section class="block block-contact" id="{% if: attrs.id %}{{ attrs.id }}{% endif %}{% if: !attrs.id %}contact{% endif %}">
+  <div class="container">
+    {% if: attrs.eyebrow %}{% include: 'partials/section-head', attrs: attrs %}{% endif %}
+
+    <div class="block-contact-grid">
+      {% if: CONTACT_ENABLED %}
+      <div class="block-contact-form-col">
+        {% include: 'partials/contact/form' %}
+      </div>
+      {% endif %}
+
+      {% if: attrs.directHeading %}
+      <aside class="block-contact-direct">
+        <h3 class="block-contact-direct-heading">{{ attrs.directHeading }}</h3>
+        <p class="block-contact-direct-line">
+          <span class="js-email" data-u="{{ EMAIL.contact.user }}" data-d="{{ EMAIL.contact.domain }}">{{ EMAIL.contact.display }}</span>
+        </p>
+      </aside>
+      {% endif %}
+    </div>
+  </div>
+</section>

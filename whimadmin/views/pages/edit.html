@@ -1,0 +1,64 @@
+<section class="card card-wide">
+  <header class="card-header">
+    <h1>Edit · <code>{{ LANG }}/{{ SLUG }}</code></h1>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages/history?lang={{ LANG }}&amp;slug={{ SLUG }}">History</a>
+      <a class="btn btn-ghost btn-sm" href="{{ BASE }}/pages">← All pages</a>
+    </div>
+  </header>
+
+  {% if: ERROR %}<div class="alert" role="alert">{{ ERROR }}</div>{% endif %}
+  {% if: NOTICE %}<div class="notice" role="status">{{ NOTICE }}</div>{% endif %}
+
+  <datalist id="asset-paths" data-site-root="{{ SITE_ROOT }}">
+    {% for: ASSET_PATHS, as: 'p' %}
+    <option value="{{ p }}"></option>
+    {% endfor %}
+  </datalist>
+
+  <form method="POST" action="{{ BASE }}/pages/edit?lang={{ LANG }}&amp;slug={{ SLUG }}" data-page-edit>
+    <input type="hidden" name="_csrf" value="{{ CSRF }}">
+
+    <fieldset class="page-meta">
+      <legend>Page meta</legend>
+      <label class="field">
+        <span class="field-label">Layout</span>
+        <select class="field-input" name="header[layout]">
+          {% for: LAYOUTS, as: 'l' %}
+          <option value="{{ l.value }}"{% if: l.selected %} selected{% endif %}>{{ l.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field-label">Meta title</span>
+        <input class="field-input" type="text" name="header[meta][title]" value="{{ META_TITLE }}" maxlength="4096">
+      </label>
+      <label class="field">
+        <span class="field-label">Meta description</span>
+        <textarea class="field-input" name="header[meta][description]" rows="2" maxlength="4096">{{ META_DESCRIPTION }}</textarea>
+      </label>
+    </fieldset>
+
+    <div class="blocks">
+      {% html: BLOCKS_HTML %}
+    </div>
+
+    <div class="add-block-bar">
+      <select class="field-input" name="_add_block_type" aria-label="Block type">
+        {% for: BLOCK_TYPES, as: 'bt' %}
+        <option value="{{ bt.value }}">{{ bt.label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-ghost btn-sm" type="submit" name="action" value="add-block">+ Add block</button>
+      {% if: HAS_CLIPBOARD %}
+      <button class="btn btn-ghost btn-sm" type="submit" name="action" value="paste-after:-1">Paste at top</button>
+      {% endif %}
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" type="submit" name="action" value="save">Save</button>
+      <a class="btn btn-ghost" href="{{ BASE }}/pages">Cancel</a>
+      <button class="btn btn-ghost danger" type="submit" name="action" value="delete-page" data-confirm="Move this page to recycler? You can restore it from the recycler later.">Delete page</button>
+    </div>
+  </form>
+</section>
