@@ -52,7 +52,7 @@
          routes.php entry from the developer first; the editor only
          decides whether (and where) the page appears in the nav. #}
       <nav class="nav-links" aria-label="{{ CURRENT_LANG.nav.primaryAria }}">
-        {% for: CURRENT_LANG.nav.primary, as: 'item' %}
+        {% for: CURRENT_LANG.navigation.main, as: 'item' %}
           {% if: item.anchor %}<a href="{{ URLS.home }}#{{ item.anchor }}" class="nav-link">{{ item.label }}</a>{% endif %}
           {% if: item.slug %}{% alias: { isCurrent: PAGE == item.slug } %}<a href="{% lookup: URLS, key: item.slug %}" class="nav-link{% if: isCurrent %} is-current{% endif %}"{% if: isCurrent %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endalias %}{% endif %}
           {% if: item.href %}<a href="{% safe_href: item.href %}" class="nav-link">{{ item.label }}</a>{% endif %}

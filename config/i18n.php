@@ -65,6 +65,6 @@ return [
      * pre-overlay deployment. Adding the file is the opt-in.
      */
     'i18n_overlay' => [
-        'allowed_sections' => ['nav', 'footer'],
+        'allowed_sections' => ['navigation'],
     ],
 ];

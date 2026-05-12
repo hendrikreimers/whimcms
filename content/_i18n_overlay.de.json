@@ -1,6 +1,6 @@
 {
-  "nav": {
-    "primary": [
+  "navigation": {
+    "main": [
       { "label": "Features",     "anchor": "features" },
       { "label": "Themes",       "anchor": "themes" },
       { "label": "Architektur",  "anchor": "architecture" },
@@ -10,6 +10,10 @@
         { "label": "Trainer",  "href": "^/en/demos/trainer" },
         { "label": "Dev",      "href": "^/en/demos/dev"      }
       ]}
+    ],
+    "footer": [
+      { "label": "Impressum",   "slug": "imprint" },
+      { "label": "Datenschutz", "slug": "privacy" }
     ]
   }
 }

@@ -9,8 +9,11 @@
     </div>
 
     <nav class="footer-nav" aria-label="{{ CURRENT_LANG.footer.navAria }}">
-      <a href="{% safe_href: URLS.imprint %}" class="footer-link">{{ CURRENT_LANG.footer.imprint }}</a>
-      <a href="{% safe_href: URLS.privacy %}" class="footer-link">{{ CURRENT_LANG.footer.privacy }}</a>
+      {% for: CURRENT_LANG.navigation.footer, as: 'item' %}
+        {% if: item.anchor %}<a href="{{ URLS.home }}#{{ item.anchor }}" class="footer-link">{{ item.label }}</a>{% endif %}
+        {% if: item.slug %}<a href="{% lookup: URLS, key: item.slug %}" class="footer-link">{{ item.label }}</a>{% endif %}
+        {% if: item.href %}<a href="{% safe_href: item.href %}" class="footer-link">{{ item.label }}</a>{% endif %}
+      {% endfor %}
     </nav>
 
     <p class="footer-copy">{{ CURRENT_LANG.footer.copy }}</p>
