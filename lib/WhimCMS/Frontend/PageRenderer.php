@@ -90,6 +90,17 @@ final class PageRenderer
             $page = null;
         }
 
+        // Hard-disabled pages are delivered as 404. The .md still
+        // exists on disk and the route still resolves — only the
+        // visitor-facing surface is gated. Operator restores the
+        // page by clearing the `disabled: true` flag in the
+        // front-matter.
+        if ($page !== null && $page->disabled()) {
+            $segment = (string)($resolved['segment'] ?? '');
+            $this->renderNotFound($this->singleLang ? $segment : ($lang . '/' . $segment));
+            return;
+        }
+
         $meta = $page !== null
             ? $this->mergeMeta($page->meta(), $dict['meta'][$slug] ?? [])
             : ($dict['meta'][$slug] ?? ['title' => (string)Config::get('seo.site_name', ''), 'description' => '']);

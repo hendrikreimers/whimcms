@@ -19,9 +19,30 @@ final class I18n
 
     private static string $i18nDir = '';
 
+    /**
+     * Content directory for editor-managed overlay files
+     * (`_i18n_overlay.<lang>.json`). `null` disables the overlay
+     * layer entirely — the dictionary is then exactly what the
+     * theme's JSON shipped, with no editor contribution merged on
+     * top. Set once at boot from Kernel; leaving it null on test
+     * scaffolds is fine.
+     */
+    private static ?string $overlayDir = null;
+
     public static function setDir(string $dir): void
     {
         self::$i18nDir = rtrim($dir, '/\\');
+    }
+
+    /**
+     * Configure the content directory the overlay loader reads
+     * `_i18n_overlay.<lang>.json` from. Pass `null` (or skip the
+     * call) to disable the overlay layer. The Kernel calls this
+     * once during bootstrap with the validated content path.
+     */
+    public static function setOverlayDir(?string $dir): void
+    {
+        self::$overlayDir = $dir === null ? null : rtrim($dir, '/\\');
     }
 
     /**
@@ -130,6 +151,31 @@ final class I18n
         }
         $langRoot = $singleLang ? $basePath : ($basePath . '/' . $lang);
         self::resolvePaths($data, $langRoot, $basePath);
+
+        // Editor-managed overlay — optional layer merged on top of
+        // the theme-provided base dictionary. Gated by setOverlayDir
+        // (the content directory) AND by an allowlist of top-level
+        // sections from `config/i18n.php → i18n_overlay.allowed_sections`.
+        // The allowlist is the security boundary: anything the editor
+        // writes outside those sections is silently dropped by the
+        // overlay loader, so the editor can never overwrite chrome
+        // strings, error messages, or any other developer-controlled
+        // surface even by trying. Path markers in overlay values are
+        // resolved with the same rules as the base, so `~/about` in
+        // overlay JSON behaves identically to `~/about` in the
+        // theme's en.json.
+        if (self::$overlayDir !== null) {
+            $allowed = (array)Config::get(
+                'i18n_overlay.allowed_sections',
+                ['nav', 'footer']
+            );
+            $overlay = I18nOverlay::load($lang, self::$overlayDir, $allowed);
+            if ($overlay !== null) {
+                self::resolvePaths($overlay, $langRoot, $basePath);
+                $data = I18nOverlay::merge($data, $overlay);
+            }
+        }
+
         return self::$loaded[$cacheKey] = $data;
     }
 

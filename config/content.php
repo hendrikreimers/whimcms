@@ -27,5 +27,25 @@ return [
         // templates/layout-<name>.html + styles/theme-<name>.css.
         'allowed_layouts'      => ['default', 'business', 'personal', 'trainer', 'dev'],
         'cache_sweep_interval' => 86400,             // 24 h
+
+        /*
+         * Per-block attribute parser limits.
+         *
+         * Hard caps applied while parsing block attributes and
+         * page front-matter. Raise these if a real-world title or
+         * description legitimately needs more bytes than the
+         * default. Both values are floored at sensible minimums in
+         * AttributeParser::setLimits so a typo here can't degrade
+         * the parser into rejecting valid input.
+         *
+         *   max_lines       — maximum total lines per attribute
+         *                     block. Default 500. Minimum 100.
+         *   max_value_len   — maximum bytes per single scalar value.
+         *                     Default 4096. Minimum 256.
+         */
+        'attribute_parser' => [
+            'max_lines'     => 500,
+            'max_value_len' => 4096,
+        ],
     ],
 ];

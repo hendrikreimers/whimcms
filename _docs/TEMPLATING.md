@@ -34,6 +34,9 @@ URL-encoded sequences, stray braces in content — all survive intact.
 | `blocks` | `{% blocks %}` | Iterate `BLOCKS` from context, render each via the registered partial |
 | `image` | `{% image: '<asset-path>', <params> %}` | Server-side cropped/resized image variant. Emits the URL as a string for `<img src="…">`. See [§ Image directive](#image-directive) |
 | `safe_href` | `{% safe_href: <expr> %}` | Evaluate `<expr>` to a URL, validate against the scheme allowlist, emit HTML-attribute-escaped. Use for any `href=` whose value comes from author-controlled content. See [§ safe_href directive](#safe_href-directive) |
+| `lookup` | `{% lookup: <map>, key: <key> %}` | Evaluate `<map>` and `<key>`, return `map[key]` HTML-escaped. Closes the dot-path-only access gap when the key is only known at render time. See [§ lookup directive](#lookup-directive) |
+| `alias` (block) | `{% alias: { name: <expr>, … } %}` … `{% endalias %}` | Bind named values into a block scope. See [§ alias directive](#alias-directive) |
+| `debug` | `{% debug: <path-or-_all> %}` | Dev-only diagnostic. Gated by `config/app.php → debug`; emits a `<pre>` of context values. See [§ debug directive](#debug-directive) |
 
 ### `{@ @}` annotations
 
@@ -231,6 +234,153 @@ project, however, used `safe_href` even for config-derived hrefs
 check per render, the gain is that any future change which lets
 request input flow into routes / lang state is automatically
 caught.
+
+### `lookup` directive
+
+`{% lookup: <map_expr>, key: <key_expr> %}` evaluates two expressions
+to a map and a key, returns `map[key]` HTML-escaped.
+
+**Why it exists.** The Expression sub-language supports only
+dot-paths with literal segments — `URLS.imprint` works because
+`imprint` is in the template source. `URLS[item.slug]` is not
+expressible: there is no bracket-indexing form, and dot-paths
+can't take a runtime value as a segment. This directive bridges
+that gap for the cases where a key is only known at render time:
+editor-driven nav data referencing routed slugs, code → message
+lookups, anything that walks a map with a runtime key.
+
+**Usage:**
+```html
+<a href="{% lookup: URLS, key: item.slug %}">{{ item.label }}</a>
+
+<p>{% lookup: CURRENT_LANG.home.contact.form.errors, key: errorCode %}</p>
+```
+
+**Failure modes:**
+
+- Map expression doesn't resolve to an array → empty output, `Log::warn`
+  entry tagged `lookup: map expression did not resolve to an array`.
+- Key not present in the map → empty output, `Log::warn` entry tagged
+  `lookup: key not found in map` (truncated key for log hygiene).
+- Looked-up value is an array/object → coerces to empty string via
+  `Sanitizer::stringify` (consistent with `{{ }}`).
+- The directive **never throws**.
+
+**Output is HTML-escaped.** Same default as `{{ }}`. If you need
+URL-attribute safety on top, wrap with `{% safe_href %}` — but
+note that values pulled from server-built maps (like `URLS`)
+don't usually need re-validation. `lookup` and `safe_href` are
+orthogonal: one resolves the value, the other validates it.
+
+**Text-mode** (`Engine::renderText`) skips the escape pass,
+consistent with `{{ }}` in plain-text mail bodies.
+
+### `alias` directive
+
+`{% alias: { name: <expr>, … } %}` … `{% endalias %}` binds named
+values into a block scope. Inside the body, `{{ name }}` refers to
+the evaluated expression. The bindings are gone at `{% endalias %}`.
+
+**Scope mechanism.** The directive merges the evaluated object onto
+the body's render context — the same per-scope context-copy
+mechanism that `for` uses for its `loop` / `item` / `attrs`
+bindings, applied without iteration. PHP array value-types make
+this safe: the parent context is never mutated.
+
+**Usage:**
+```html
+{# Avoid evaluating the same expression twice. #}
+{% alias: { isCurrent: PAGE == item.slug } %}
+  <a href="{% lookup: URLS, key: item.slug %}"
+     class="nav-link{% if: isCurrent %} is-current{% endif %}"
+     {% if: isCurrent %}aria-current="page"{% endif %}>{{ item.label }}</a>
+{% endalias %}
+
+{# Give a long path a short local name. #}
+{% alias: { tier: pricing.tiers.pro } %}
+  <h3>{{ tier.title }}</h3>
+  <p>{{ tier.price }} / {{ tier.period }}</p>
+{% endalias %}
+```
+
+**Scope behaviour:**
+
+- Body sees the parent context PLUS the merged aliases.
+- `{% include %}` inside the body still gets the entire child
+  context (parent + aliases) because `IncludeDirective` copies the
+  context for the child render. To isolate, pass an explicit
+  `attrs: <expr>` on the include.
+- Outside the block, the parent context is unchanged.
+- Aliases can shadow context names (an alias named `URLS` would
+  hide the global). Don't shadow names the body still needs.
+
+**Forgiving runtime.** If the argument doesn't evaluate to an array
+(scalar passed, null path, etc.), the body still renders, but with
+no new bindings — references to the missing names resolve to null,
+identical to any other missing path. A `Log::warn` entry tagged
+`alias: bindings expression did not resolve to an array` records
+the misuse without 500-ing the page.
+
+**Block, not iteration.** `alias` always renders its body — even
+when the aliases array is empty. It's a binding form, not a loop.
+
+### `debug` directive
+
+`{% debug: _all %}` dumps the entire render context as
+pretty-printed JSON inside a `<pre class="debug">` block. Excluded
+top-level keys (CSRF token, captcha state, honeypot field name)
+are filtered out.
+
+`{% debug: <path> %}` dumps a single value at the given dot-path,
+same formatting. If the path's first segment names an excluded
+top-level key, the dump renders `[excluded by debug policy: <key>]`
+instead — the exclusion applies whether the dump is enumerative
+(`_all`) or targeted.
+
+**Two gates, both required for any output:**
+
+1. `config/app.php → debug` is truthy.
+2. Not in text-mode render (mail-template flag absent).
+
+When either gate fails, the directive renders an empty string —
+silent. A forgotten `{% debug %}` left in a production template
+emits nothing and never crashes.
+
+**Excluded keys (`EXCLUDED_KEYS` in the directive class):**
+
+- `FORM_TOKEN` — CSRF token; leaking it would enable authenticated
+  POST replay.
+- `CAPTCHA` — proof-of-work nonce + salt + difficulty; an attacker
+  who sees the salt can pre-compute solutions for the form's
+  grace period.
+- `HONEYPOT_FIELD` — field name derived from the server secret;
+  leaking it lets a bot avoid the trap.
+
+Adding a key to the list is cheap; removing one is a security
+decision that should be justified in code review.
+
+**Usage:**
+```html
+{% debug: _all %}          {# whole context, minus excluded keys  #}
+{% debug: URLS %}          {# one branch                          #}
+{% debug: CURRENT_LANG.nav %}
+{% debug: FORM_TOKEN %}    {# renders the excluded marker         #}
+```
+
+**Output security:**
+
+- Always `htmlspecialchars`'d before emission, even though the
+  surrounding tag is `<pre>`. Without escape, a value containing
+  `</pre><script>…` would break out of the sandbox tag and execute.
+  Defense-in-depth: gated PLUS escaped.
+- `_all` enumerates **top-level keys only**. Nested sensitive data
+  (none present today) would need its own filter pass if added in
+  the future.
+
+**Style:** `<pre class="debug">` so themes can style the dump
+(monospace, max-height with scroll, background) if they want. No
+baseline CSS is bundled; the block renders perfectly readable even
+with no styles applied.
 
 #### `{!! !!}` vs `{% html: %}`
 

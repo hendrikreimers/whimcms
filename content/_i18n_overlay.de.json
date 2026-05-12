@@ -1,0 +1,15 @@
+{
+  "nav": {
+    "primary": [
+      { "label": "Features",     "anchor": "features" },
+      { "label": "Themes",       "anchor": "themes" },
+      { "label": "Architektur",  "anchor": "architecture" },
+      { "label": "Demos", "children": [
+        { "label": "Business", "href": "^/en/demos/business" },
+        { "label": "Personal", "href": "^/en/demos/personal" },
+        { "label": "Trainer",  "href": "^/en/demos/trainer" },
+        { "label": "Dev",      "href": "^/en/demos/dev"      }
+      ]}
+    ]
+  }
+}

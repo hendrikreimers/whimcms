@@ -32,4 +32,39 @@ return [
      * default_lang.
      */
     'detect_lang' => true,
+
+    /**
+     * Editor-managed i18n overlay.
+     *
+     * If a file `content/_i18n_overlay.<lang>.json` exists, its
+     * top-level sections — filtered against the allowlist below —
+     * are deep-merged on top of the theme's `i18n/<lang>.json`
+     * before any template renders. Lets the editor own nav
+     * structure, page meta overrides, and footer copy without
+     * touching theme files; survives theme updates because the
+     * overlay lives in `content/`, which is editor-domain.
+     *
+     * `allowed_sections` is the security boundary. Any top-level
+     * key the overlay writes that ISN'T listed here is silently
+     * dropped by the loader. Keep the list as tight as the editor
+     * surface requires — broadening it means handing more of the
+     * dictionary to whoever can edit the file. In particular,
+     * `errors`, `a11y`, `contactMail`, `home.contact.*` and
+     * anything that drives security-bearing text MUST stay off
+     * the list.
+     *
+     * Note: per-page meta (`title`, `description`) is intentionally
+     * NOT in the default allowlist. Page meta lives in the `.md`
+     * front-matter — the editor edits it there via the page editor,
+     * with `i18n/<lang>.json → meta.<slug>` as a developer-shipped
+     * fallback for missing front-matter. A second override path in
+     * the overlay would only create ambiguity ("which wins?") for
+     * zero gain.
+     *
+     * Missing overlay file → no merge, behaviour identical to a
+     * pre-overlay deployment. Adding the file is the opt-in.
+     */
+    'i18n_overlay' => [
+        'allowed_sections' => ['nav', 'footer'],
+    ],
 ];

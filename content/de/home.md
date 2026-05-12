@@ -1,5 +1,6 @@
 ---
 layout: default
+hidden: true
 meta:
   title: WhimCMS — minimales, sicherheitsorientiertes PHP-CMS
   description: Server-gerendert, dateibasiert, kein Build-Step. Eine Codebasis, die du an einem Nachmittag liest und überall hostest, wo PHP läuft.

@@ -79,8 +79,16 @@ final class PageLoader
     // Slugs are author-controlled (defined in config/routes.php), not
     // visitor-controlled. The realpath-containment check below is the
     // second gate regardless.
-    private const HEADER_ALLOWED_KEYS = ['layout', 'meta'];
+    private const HEADER_ALLOWED_KEYS = ['layout', 'meta', 'hidden', 'disabled'];
     private const META_ALLOWED_KEYS = ['title', 'description'];
+
+    /**
+     * Accepted string forms for the boolean front-matter flags
+     * (`hidden`, `disabled`). AttributeParser produces strings — the
+     * loader normalises here and rejects anything else.
+     */
+    private const BOOL_TRUE_FORMS  = ['true',  'yes', '1'];
+    private const BOOL_FALSE_FORMS = ['false', 'no',  '0', ''];
 
     /** Application secret used to HMAC-sign cache files. */
     private string $secret;
@@ -495,6 +503,21 @@ final class PageLoader
             if (!is_string($layout) || !in_array($layout, $this->allowedLayouts, true)) {
                 throw new ParseException(
                     "Layout '" . (is_string($layout) ? $layout : 'non-string') . "' is not in the allowlist.",
+                    1
+                );
+            }
+        }
+        foreach (['hidden', 'disabled'] as $boolKey) {
+            if (!isset($header[$boolKey])) continue;
+            $v = $header[$boolKey];
+            if (!is_string($v)) {
+                throw new ParseException("Front-matter '{$boolKey}' must be a string.", 1);
+            }
+            $norm = strtolower(trim($v));
+            if (!in_array($norm, self::BOOL_TRUE_FORMS,  true)
+                && !in_array($norm, self::BOOL_FALSE_FORMS, true)) {
+                throw new ParseException(
+                    "Front-matter '{$boolKey}' must be true/false/yes/no/1/0.",
                     1
                 );
             }

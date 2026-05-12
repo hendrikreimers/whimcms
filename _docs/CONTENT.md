@@ -3,24 +3,28 @@
 How to edit pages, add new ones, manage translations, and decide
 what goes where.
 
-## The three-tier model
+## The four-tier model
 
 ```
-content/<lang>/<slug>.md   per-page composition + prose       ← edit per page
-i18n/<lang>.json           UI microcopy (chrome)              ← edit per locale
-templates/                 visual rendering                   ← engineering only
+content/<lang>/<slug>.md         per-page composition + prose    ← edit per page
+content/_i18n_overlay.<lang>.json  editor i18n overrides          ← edit per locale (optional)
+i18n/<lang>.json                  theme microcopy (chrome)        ← edit per locale
+templates/                        visual rendering                ← engineering only
 ```
 
 | Layer | Holds | Edited by |
 |---|---|---|
-| `content/` | Page composition (which blocks, in what order) and the prose inside them | Authors / editors |
-| `i18n/` | Nav labels, footer links, common phrases, form labels, error messages, page-meta fallbacks | Authors / engineers |
+| `content/<lang>/<slug>.md` | Page composition (which blocks, in what order), the prose inside them, plus per-page meta (title, description) in the front-matter | Authors / editors |
+| `content/_i18n_overlay.<lang>.json` | Editor-controlled site-wide overrides on top of theme i18n: nav structure, footer copy (subject to an allowlist in `config/i18n.php`) | Authors / editors |
+| `i18n/<lang>.json` | Theme-shipped chrome: form labels, error messages, ARIA strings, page-meta fallbacks | Engineers / theme authors |
 | `templates/` | HTML structure of each block, layout, partials | Engineers |
 
-**Rule of thumb:** if it's *what's on this page*, it's in
-`content/<lang>/<slug>.md`. If it's *what surrounds every page* (nav,
-footer, form labels, validation errors), it's in `i18n/<lang>.json`.
-If it's *how it looks*, it's in `templates/`.
+**Rule of thumb:** if it's *what's on this page* (content + meta),
+it's in `content/<lang>/<slug>.md`. If it's *what surrounds every
+page* and editor-managed (nav, footer copy), it's in
+`content/_i18n_overlay.<lang>.json`. If it's *part of the theme's
+chrome* (form labels, errors, ARIA), it's in `i18n/<lang>.json`. If
+it's *how it looks*, it's in `templates/`.
 
 ## Editing existing content
 
@@ -269,16 +273,119 @@ for every registered block, its attributes, and an example.
 
 ### 3. Decide whether the page needs nav
 
-Each theme has its own nav partial under `templates/partials/nav-<theme>.html`.
-Edit the relevant nav partial(s) directly — there's no central nav
-config. If the page should appear in nav, add an `<a>` tag with
-`{{ URLS.<slug> }}` and an i18n label under `i18n/<lang>.json → nav.<slug>`.
+If the active theme has an editor-driven nav (the core theme does;
+see [§ Editor overlay file](#editor-overlay-file) below), add the
+page to `content/_i18n_overlay.<lang>.json` under `nav.primary`:
+
+```json
+{
+  "nav": {
+    "primary": [
+      ...
+      { "label": "Pricing", "slug": "pricing" }
+    ]
+  }
+}
+```
+
+Reorder, relabel, or hide by editing the list — no template touch
+needed.
+
+Themes whose nav is still hardcoded (e.g. the demo themes
+`business`, `personal`, `trainer`, `dev` — bundled as single-page
+showcases) require editing the matching `templates/partials/nav-<theme>.html`
+partial directly.
 
 Pages reachable only via direct URL or in-page links don't need nav
 edits — just the route + the content file.
 
 That's the whole flow. No template file under `templates/pages/` is
 needed; the layout renders blocks straight from the `.md`.
+
+## Editor overlay file
+
+`content/_i18n_overlay.<lang>.json` is an **optional** per-language
+file that merges editor-controlled overrides on top of the theme's
+`i18n/<lang>.json` at i18n load time. It's how an editor manages
+nav structure and footer copy without touching theme files (which
+would be lost on theme update).
+
+Per-page meta (title, description) is intentionally *not* in this
+file — it lives in the page's own `.md` front-matter and is edited
+via the page editor.
+
+### Format
+
+Plain JSON. Same path markers as the theme i18n (`~/x` for
+language-aware, `^/x` for base-relative) — resolved at load time.
+
+```json
+{
+  "nav": {
+    "primary": [
+      { "label": "Features", "anchor": "features" },
+      { "label": "Imprint",  "slug":   "imprint"  },
+      { "label": "Docs", "children": [
+        { "label": "Install", "slug":   "install" },
+        { "label": "Blog",    "href":   "https://example.com/blog" }
+      ]}
+    ]
+  },
+  "footer": {
+    "copy": "Custom footer line — replaces the theme default."
+  }
+}
+```
+
+### Nav item shapes (used by the core theme's nav partial)
+
+| Shape | Use | Active state |
+|---|---|---|
+| `{ label, anchor }` | In-page hash link on home (`#features`) | — |
+| `{ label, slug }` | Routed page in the active language; URL resolved via the slug→URL map | Auto, when `PAGE == slug` |
+| `{ label, href }` | Direct URL escape hatch: cross-language link, external site. Validated via `safe_href` (https/mailto/tel/root-relative/anchor only) | None (no slug to compare) |
+| `{ label, children: [...] }` | Dropdown group whose children use the same three shapes above | — |
+
+**Preference order:** anchor > slug > href. Use `slug` for routed
+pages whenever possible (active state, language flexibility); use
+`href` only when slug-routing can't express the target (e.g.
+cross-language demos: `^/en/demos/business` from the de overlay).
+
+### Allowlist — the security boundary
+
+`config/i18n.php → i18n_overlay.allowed_sections` defines which
+top-level keys the overlay may contribute. Anything outside the
+list is **silently dropped** during load — an editor cannot
+overwrite `errors._404.title`, `a11y.skipLink`, `home.contact.form.errors.*`
+or any chrome string even by writing the key. Default:
+
+```php
+'i18n_overlay' => [
+    'allowed_sections' => ['nav', 'footer'],
+],
+```
+
+Keep the list as tight as the editor surface requires. Broadening
+it hands more of the dictionary to whoever can edit the file.
+
+### Merge semantics
+
+- Both sides associative → recursive merge per key. `nav` in the
+  overlay merges with `nav` in the base.
+- Either side is a sequential list → overlay value wholly replaces
+  base value. `nav.primary: [...]` from the overlay defines the
+  full list; the base's `nav.primary` (if any) is dropped.
+- Anything else → overlay replaces base, or is added fresh.
+
+### Failure modes
+
+- File absent → no merge, behaviour identical to a pre-overlay
+  deployment. Adding the file is the opt-in.
+- File present but empty → treated as absent. Editor saving an
+  empty file by accident doesn't hard-fail.
+- Invalid JSON → throws `RuntimeException`, fail loud so editor
+  mistakes surface on reload instead of silently half-merging.
+- Top-level not an object → treated as absent.
 
 ## Adding a new block type to a page
 
@@ -315,25 +422,31 @@ recipe with example.
 If a content file is missing for a language, that page returns 404
 in that language — there's no auto-fallback to a different language.
 
-## When to use i18n vs. content
+## When to use which file
 
-Both `i18n/` and `content/` carry per-language strings. The boundary:
+Per-language strings live in three places, with editor sovereignty
+ranked from highest to lowest:
 
 | It is …                                          | Goes to … |
 |---|---|
 | Body copy you'd find in a CMS (paragraphs, headings, image alt-texts) | `content/<lang>/<slug>.md` |
-| Section headlines, eyebrows, CTAs that vary per page | `content/` |
-| Lists where each item has labels and bodies (programs, voices, FAQs) | `content/` |
-| Nav links, footer columns, language switcher labels | `i18n/` |
-| Form labels, placeholders, validation error messages | `i18n/` |
-| ARIA labels, common UI strings ("Read more", "Back to home") | `i18n/` |
-| Email addresses, social handles | `i18n/` (because `EmailProtection` reads them from there per `config/email_protection.php → email_protection.paths`) |
-| Per-page meta fallback (when a `.md` doesn't set its own) | `i18n/ → meta.<slug>` |
+| Section headlines, eyebrows, CTAs that vary per page | `content/<lang>/<slug>.md` |
+| Lists where each item has labels and bodies (programs, voices, FAQs) | `content/<lang>/<slug>.md` |
+| Nav structure (items, order, labels, dropdowns) | `content/_i18n_overlay.<lang>.json → nav` |
+| Per-page meta (title, description) | `content/<lang>/<slug>.md` front-matter (with `i18n/<lang>.json → meta.<slug>` as fallback) |
+| Footer copy the editor controls | `content/_i18n_overlay.<lang>.json → footer` |
+| Form labels, placeholders, validation error messages | `i18n/<lang>.json` |
+| ARIA labels, common UI strings ("Read more", "Back to home") | `i18n/<lang>.json` |
+| Email addresses, social handles | `i18n/<lang>.json` (because `EmailProtection` reads them from there per `config/email_protection.php → email_protection.paths`) |
+| Per-page meta fallback (when neither overlay nor `.md` sets its own) | `i18n/<lang>.json → meta.<slug>` |
 
-When in doubt: a value that affects the **rendering of one specific
-page only** belongs in `content/`. A value that's referenced from
-several pages or by backend code (the contact controller, the
-mailer, the form validator) belongs in `i18n/`.
+When in doubt:
+- A value that affects the **rendering of one specific page only** →
+  `content/<lang>/<slug>.md`.
+- A value the **editor manages but spans the site** (nav, footer copy,
+  per-page meta override) → `content/_i18n_overlay.<lang>.json`.
+- A value referenced from **backend code** (the contact controller,
+  the mailer, the form validator) → `i18n/<lang>.json`.
 
 ## File-level limits
 

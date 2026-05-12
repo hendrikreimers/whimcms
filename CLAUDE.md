@@ -40,7 +40,7 @@ directly. Either layout is valid; the rules are the same.
 | `<paths.theme>/i18n/` (or `<paths.i18n>/`) | edit / add / delete | json only |
 | `<paths.theme>/assets/` | edit / add / delete | svg, png, jpg, webp, woff2, ico — theme identity assets |
 | `assets/` (root) | edit / add / delete | png, jpg, webp, gif — site-level raster content (image-server source) |
-| `<paths.content>/` | edit / add / delete | md only |
+| `<paths.content>/` | edit / add / delete | md only (page content), `_i18n_overlay.<lang>.json` (editor i18n overlay — see below) |
 
 ### Scope: where you must ask each time first
 
@@ -60,6 +60,11 @@ directly. Either layout is valid; the rules are the same.
 | `.htaccess`, `_htaccess_production` | Apache configuration including security headers (CSP, HSTS, etc.). The user maintains these. |
 | `var/` | Runtime state (cache, secret, rate-limit buckets, mail log). Never write. The PHP runtime owns this directory. |
 | `_docs/audits/` | Internal hardening notes — gitignored, not for distribution. |
+| `.idea/`, `.vscode/` | IDE-specific working state. Never read, never write. |
+| `.git/` | Git internals. Read-only at most, and only via `git` commands — never touch the files directly. |
+| `.env`, `.env.*` | Operator secrets. Never read, never write, never include in diffs / log output / debug dumps. |
+| `.claude/` | Claude Code working directory (worktrees, session state). Never read, never write. |
+| `node_modules/` | Should never exist in this repo (no Node deps), but if you ever see it, never read or write. |
 
 ### Operations forbidden without explicit permission
 
@@ -200,6 +205,45 @@ three classes:
 folder named `config.<theme-name>/` (e.g. `config.coach/` next to
 `theme.coach/`). End user copies them into `config/` when activating
 the theme. NEVER blind-copy — review each file first.
+
+### Editor i18n overlay
+
+`content/_i18n_overlay.<lang>.json` is an optional editor-managed
+file that deep-merges onto the theme's `i18n/<lang>.json` at load
+time. It's where the editor controls **nav structure** and
+**footer copy** without touching theme files (so theme updates
+don't clobber editor work).
+
+Per-page meta (title, description) is intentionally NOT in the
+overlay — it lives in the page's `.md` front-matter, edited via
+the page editor. A second override path would only create "which
+wins?" ambiguity for zero gain.
+
+When **building a theme** with Claude: you may create this file as
+part of the showcase / initial setup — same way `nav-core.html` is
+shipped pre-wired to read from it. **Do not** assume ongoing edits
+to it are your job; the file becomes editor-domain after handover.
+If a user asks you to add/reorder a nav item in production, prefer
+asking them to edit the JSON directly over doing it for them, so
+they own the muscle memory.
+
+Schema (validated via the allowlist in `config/i18n.php → i18n_overlay.allowed_sections`):
+
+- Default-allowed top-level sections: `nav`, `footer`.
+- Anything outside the allowlist is silently dropped on load — an
+  editor cannot overwrite chrome strings (errors, ARIA, form
+  labels) even by writing the key.
+
+When designing a theme's nav partial: prefer iterating
+`CURRENT_LANG.nav.primary` with `for` + `lookup` (for slug→URL
+resolution) + `alias` (for repeated `isCurrent` flags) over
+hardcoding `<a>` tags. The core theme's `nav-core.html` is the
+reference pattern. The demo themes (`business`, `personal`,
+`trainer`, `dev`) intentionally keep their nav hardcoded — they're
+single-page showcases, not editor-driven sites — so use them as a
+contrast example, not as a template.
+
+Full format reference: [`_docs/CONTENT.md → Editor overlay file`](_docs/CONTENT.md#editor-overlay-file).
 
 ### Security warning when adopting third-party theme configs
 
@@ -342,6 +386,11 @@ asset roots and emits the cache URL (`/img-c/<basename>-<hash>.<ext>`).
 {% for: list, as: 'item', include: 'path' %}  inline-include loop (no body)
 {% blocks %}           render the page's block stream
 {% html: body %}       verbatim — restricted to Markdown-rendered bodies only
+{% safe_href: expr %}  href value, scheme-allowlisted + HTML-escaped
+{% image: 'path', width: N, height: N %}  cropped/scaled image variant URL
+{% lookup: map, key: keyExpr %}          dynamic key access (URLS[item.slug] equivalent)
+{% alias: { name: expr, … } %}…{% endalias %}  block-scoped value binding
+{% debug: pathOrAll %}  dev-only context dump, gated by config.debug
 {# comment #}          stripped from output
 {@ name … @}           compile-time annotation — pure metadata, no output
 ```

@@ -47,6 +47,27 @@ Plus per-theme nav/footer partials under `templates/partials/`. The
 **block partials** under `templates/partials/blocks/` are shared by
 every theme — same HTML, restyled by CSS. That's the design point.
 
+## Editor vs. engineer
+
+WhimCMS has no admin UI, but it does have a clean editor/engineer
+split. An optional file `content/_i18n_overlay.<lang>.json` merges
+editor-controlled overrides on top of the theme's `i18n/<lang>.json`
+at load time, gated by an allowlist in `config/i18n.php`. The
+editor uses it for:
+
+- Nav structure (items, order, labels, dropdowns)
+- Per-page meta overrides (title, description)
+- Footer copy
+
+The theme stays editor-untouchable. The core theme's nav partial
+demonstrates the pattern — it renders generically from the overlay,
+so adding a nav item or reordering is a JSON edit, not a template
+edit. The four demo themes keep their nav hardcoded (single-page
+showcases), illustrating the contrast.
+
+See [`_docs/CONTENT.md → Editor overlay file`](./_docs/CONTENT.md#editor-overlay-file)
+for the format and security model.
+
 ## Why this exists (and why not WordPress / TYPO3)
 
 Built for the class of sites that's **too small for a CMS but too
@@ -60,7 +81,7 @@ What this project deliberately doesn't have, by comparison:
 |---|---|
 | Plugin ecosystem with weekly-CVE treadmill | No plugins. What's in the repo is what runs. |
 | Theme marketplace shipping arbitrary PHP | No themes. Templates are author-edited HTML. |
-| `wp-admin` / backend as login attack surface | No admin UI. Editing is SSH + text editor. |
+| `wp-admin` / backend as login attack surface | No admin UI. Editor edits nav + labels via a JSON overlay in `content/`; engineers manage themes separately. SSH + text editor. |
 | Composer dependency tree → supply-chain risk | No `vendor/`, no `composer.lock`. |
 | Database → SQL-injection class to defend against | No DB. Content is files. |
 | JS build pipeline (`node_modules/`, webpack, …) | No build step. ES modules served as-is. |

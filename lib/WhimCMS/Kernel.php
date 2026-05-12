@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS;
 
+use H42\WhimCMS\Content\AttributeParser;
 use H42\WhimCMS\Content\CacheSweeper as ContentCacheSweeper;
 use H42\WhimCMS\Content\PageLoader;
 use H42\WhimCMS\Frontend\ContactPostHandler;
@@ -111,6 +112,12 @@ final class Kernel
         );
         $this->stateDir = $this->paths['var'] . '/state';
         I18n::setDir($this->paths['i18n']);
+        // Editor-managed i18n overlay lives under content/ and is
+        // wired here so I18n::load() can pick up the file for the
+        // active language. Passing the validated content path keeps
+        // the loader from synthesising paths from raw config; the
+        // PathResolver has already realpath-contained it.
+        I18n::setOverlayDir($this->paths['content']);
 
         $this->supportedLangs = (array)Config::get('supported_langs', ['en']);
         $this->routes         = (array)Config::get('routes', []);
@@ -150,6 +157,17 @@ final class Kernel
         if ($this->allowedLayouts === []) {
             $this->allowedLayouts = ['default'];
         }
+
+        // Apply operator-configurable AttributeParser caps. Floored
+        // at sensible minimums inside setLimits() so a typo here
+        // can't break parsing. Called once at boot — every
+        // AttributeParser::parse() afterwards sees these limits.
+        $apCfg = (array)($contentCfg['attribute_parser'] ?? []);
+        AttributeParser::setLimits(
+            (int)($apCfg['max_lines']     ?? AttributeParser::MAX_LINES),
+            (int)($apCfg['max_key_len']   ?? AttributeParser::MAX_KEY_LEN),
+            (int)($apCfg['max_value_len'] ?? AttributeParser::MAX_VALUE_LEN),
+        );
 
         // Application secret — used by the content-cache layer to sign
         // cache files (HMAC over JSON payload), so a planted file in
@@ -218,7 +236,7 @@ final class Kernel
             return;
         }
         if ($path === 'sitemap.xml') {
-            \H42\WhimCMS\Seo\Sitemap::send($basePath);
+            \H42\WhimCMS\Seo\Sitemap::send($basePath, $this->pageLoader, $this->singleLang);
             return;
         }
 

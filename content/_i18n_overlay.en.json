@@ -1,0 +1,15 @@
+{
+  "nav": {
+    "primary": [
+      { "label": "Features",     "anchor": "features" },
+      { "label": "Themes",       "anchor": "themes" },
+      { "label": "Architecture", "anchor": "architecture" },
+      { "label": "Demos", "children": [
+        { "label": "Business", "slug": "demo-business" },
+        { "label": "Personal", "slug": "demo-personal" },
+        { "label": "Trainer",  "slug": "demo-trainer" },
+        { "label": "Dev",      "slug": "demo-dev" }
+      ]}
+    ]
+  }
+}

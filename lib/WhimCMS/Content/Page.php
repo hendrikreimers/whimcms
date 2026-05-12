@@ -51,4 +51,49 @@ final class Page
             'description' => is_string($m['description'] ?? null) ? $m['description'] : '',
         ];
     }
+
+    /**
+     * Soft-hide flag from front-matter `hidden: true`.
+     *
+     * A hidden page renders normally when its URL is requested
+     * (it's not "deleted") — but it's excluded from sitemap.xml,
+     * and is delivered to nav-rendering templates with a
+     * `hidden: true` flag so the template author can choose to
+     * skip it. Typical use: landing pages reachable only via
+     * direct link / campaign URL.
+     *
+     * The front-matter parser stores every value as a string, so
+     * we accept `true` / `yes` / `1` as truthy. Anything else
+     * (including missing) is false.
+     */
+    public function hidden(): bool
+    {
+        return self::truthy($this->header['hidden'] ?? null);
+    }
+
+    /**
+     * Hard-disable flag from front-matter `disabled: true`.
+     *
+     * A disabled page is delivered as 404 when its URL is
+     * requested. It is also excluded from sitemap.xml and from
+     * the language switcher. Use this to retire a page without
+     * deleting it — restore by removing the flag.
+     */
+    public function disabled(): bool
+    {
+        return self::truthy($this->header['disabled'] ?? null);
+    }
+
+    /**
+     * Coerce the front-matter's string representation of a boolean
+     * (`true` / `yes` / `1`) into a real bool. Anything else is
+     * false — including the absence of the key entirely.
+     */
+    private static function truthy(mixed $v): bool
+    {
+        if (is_bool($v)) return $v;
+        if (!is_string($v)) return false;
+        $v = strtolower(trim($v));
+        return $v === 'true' || $v === 'yes' || $v === '1';
+    }
 }

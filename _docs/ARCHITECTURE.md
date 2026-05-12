@@ -65,7 +65,11 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
     Config.php            dot-path config lookup, section-allowlist loader
     Log.php               level-filtered wrapper around error_log()
     Router.php            base-path detection + per-language URL→slug
-    I18n.php              JSON dictionary loader, path-marker resolution
+    I18n.php              JSON dictionary loader, path-marker resolution,
+                          optional editor-overlay merge
+    I18nOverlay.php       editor-managed overlay loader (read + allowlist
+                          filter + deep-merge); reads
+                          content/_i18n_overlay.<lang>.json when present
     ErrorHandler.php      debug-aware fatal/exception/error handlers
 
     Content/              block-based content engine
@@ -96,7 +100,8 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
                           {@ name @} compile-time annotations
       Annotation.php      readonly value object emitted by scanAnnotations
       BuiltInDirectives.php single canonical list of built-in directives
-                          (Text, Var, Raw, Include, If, For, Html, Blocks)
+                          (Text, Var, Raw, Include, If, For, Html, Blocks,
+                          Image, SafeHref, Lookup, Alias, Debug)
       Directives/         one file per directive type
 
     Frontend/             front-controller helpers — request-bound classes
@@ -305,7 +310,8 @@ Walk through `lib/WhimCMS/Kernel.php`. Every request follows one of these paths.
 5. Instantiate `Engine` against `<paths.theme>/templates`. The engine
    constructor self-wires:
    - Instantiates every directive in `BuiltInDirectives::all()` (Text,
-     Var, Raw, Include, If, For, Html, Blocks).
+     Var, Raw, Include, If, For, Html, Blocks, Image, SafeHref,
+     Lookup, Alias, Debug).
    - Builds keyword → directive and token-type → directive maps with
      conflict checks at boot.
    - Walks `partials/blocks/*.html`, harvests every `{@ block @}`
@@ -365,7 +371,11 @@ Walk through `lib/WhimCMS/Kernel.php`. Every request follows one of these paths.
 
 1. Load i18n: `I18n::load($lang, $basePath, $singleLang)` returns the
    active dictionary with path markers (`~/…`, `^/…`) already
-   resolved.
+   resolved. If `content/_i18n_overlay.<lang>.json` exists, its
+   allowlisted sections (see `config/i18n.php → i18n_overlay.allowed_sections`)
+   are deep-merged on top via `I18nOverlay` — the editor-controlled
+   layer for nav structure, page-meta overrides, and footer copy
+   without touching theme files.
 2. Try to load page content: `pageLoader->load($lang, $slug, $basePath, $singleLang)`.
    - On `ContentNotFoundException`: fall back to legacy template path
      (only `_404.html` reaches this today; every content page has an `.md`).

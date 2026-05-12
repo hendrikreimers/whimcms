@@ -42,6 +42,9 @@ final class BuiltInDirectives
             new Directives\BlocksDirective($engine),
             new Directives\ImageDirective($engine),
             new Directives\SafeHrefDirective(),
+            new Directives\LookupDirective(),
+            new Directives\AliasDirective(),
+            new Directives\DebugDirective(),
         ];
     }
 }

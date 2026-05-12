@@ -164,6 +164,66 @@ body.theme-core {
 .theme-core .lang-sep { color: var(--c-faint); }
 .theme-core .btn-nav-cta { padding: 0.5rem 1rem; font-size: 0.9rem; }
 
+/* ----- Dropdown sub-menu -----
+   Editor-driven primary-nav items that have `children` render as a
+   group: parent label sits inline with the other nav links, the
+   child list reveals on hover / keyboard focus. No JS needed —
+   `:focus-within` covers the keyboard path. Mobile collapses the
+   group inline inside the drawer (overrides below in the media
+   query block). */
+.theme-core .nav-dropdown { position: relative; }
+.theme-core .nav-dropdown-label {
+  color: var(--c-muted);
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding-block: var(--space-2);
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.theme-core .nav-dropdown-label::after {
+  content: '';
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.theme-core .nav-dropdown:hover .nav-dropdown-label,
+.theme-core .nav-dropdown:focus-within .nav-dropdown-label { color: var(--c-text); }
+.theme-core .nav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
+}
+.theme-core .nav-dropdown:hover .nav-dropdown-menu,
+.theme-core .nav-dropdown:focus-within .nav-dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+.theme-core .nav-dropdown-link {
+  white-space: nowrap;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.theme-core .nav-dropdown-link:hover { background: var(--c-accent-soft); }
+
 .theme-core .nav-toggle { display: none; }
 
 @media (max-width: 860px) {
@@ -196,6 +256,23 @@ body.theme-core {
   html.nav-open .theme-core .nav-primary { transform: translateY(0); opacity: 1; pointer-events: auto; }
   .theme-core .nav-links { flex-direction: column; gap: var(--space-3); }
   .theme-core .nav-actions { justify-content: space-between; }
+  /* Dropdown collapses into the drawer — child links stack inline
+     under the parent label instead of floating, so the whole
+     menu is visible without any toggle interaction. */
+  .theme-core .nav-dropdown { position: static; }
+  .theme-core .nav-dropdown-label::after { display: none; }
+  .theme-core .nav-dropdown-menu {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    padding: var(--space-2) 0 0 var(--space-4);
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    transition: none;
+  }
+  .theme-core .nav-dropdown-link { padding-inline: 0; }
 }
 
 /* ----- Footer ----- */

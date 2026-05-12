@@ -55,11 +55,53 @@ namespace H42\WhimCMS\Content;
  */
 final class AttributeParser
 {
+    /**
+     * Default caps. Public for backwards compatibility with code that
+     * references `AttributeParser::MAX_*` constants directly (e.g. for
+     * client-side maxlength hints). At parse time the *runtime* limits
+     * (below) are what's actually enforced.
+     */
     public const MAX_LINES     = 500;
     public const MAX_KEY_LEN   = 64;
     public const MAX_VALUE_LEN = 4096;
 
+    /**
+     * Runtime, operator-overridable caps. Defaults match the constants
+     * above. The Kernel calls {@see setLimits()} once at boot with
+     * values from `config/content.php → content.attribute_parser`,
+     * letting an operator raise the value cap when a real-world title
+     * or description needs more bytes without forcing an engine edit.
+     *
+     * Lower bounds are enforced in setLimits() so a typo in config
+     * can't reduce caps below sensible minimums and break parsing.
+     */
+    private static int $maxLines    = self::MAX_LINES;
+    private static int $maxKeyLen   = self::MAX_KEY_LEN;
+    private static int $maxValueLen = self::MAX_VALUE_LEN;
+
     private const KEY_PATTERN = '/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/';
+
+    /**
+     * Override the per-parse caps. Idempotent: call once per boot from
+     * the Kernel. Each cap is clamped to a hard minimum so a misconfigured
+     * 0 / negative value can't degrade the parser into rejecting any
+     * legitimate input.
+     *
+     * Minimums:
+     *   - max_lines:     100
+     *   - max_key_len:    16
+     *   - max_value_len: 256
+     *
+     * No upper-bound clamp — the operator is trusted to pick a sane
+     * number; pathological values (10 GiB strings) still hit the
+     * file-size cap before reaching this parser.
+     */
+    public static function setLimits(int $maxLines, int $maxKeyLen, int $maxValueLen): void
+    {
+        self::$maxLines    = max(100, $maxLines);
+        self::$maxKeyLen   = max(16,  $maxKeyLen);
+        self::$maxValueLen = max(256, $maxValueLen);
+    }
 
     /**
      * Parse a key/value source slice into a nested array.
@@ -77,9 +119,9 @@ final class AttributeParser
     public static function parse(string $src, int $sourceLineOffset = 1): array
     {
         $lines = $src === '' ? [] : explode("\n", rtrim($src, "\n"));
-        if (count($lines) > self::MAX_LINES) {
+        if (count($lines) > self::$maxLines) {
             throw new ParseException(
-                'Attribute block exceeds the maximum of ' . self::MAX_LINES . ' lines.',
+                'Attribute block exceeds the maximum of ' . self::$maxLines . ' lines.',
                 $sourceLineOffset
             );
         }
@@ -392,9 +434,9 @@ final class AttributeParser
 
     private static function validatedScalar(string $value, int $absLine): string
     {
-        if (strlen($value) > self::MAX_VALUE_LEN) {
+        if (strlen($value) > self::$maxValueLen) {
             throw new ParseException(
-                'Value exceeds maximum length of ' . self::MAX_VALUE_LEN . ' bytes.',
+                'Value exceeds maximum length of ' . self::$maxValueLen . ' bytes.',
                 $absLine
             );
         }
