@@ -63,6 +63,34 @@ final class Response
         return new self($status, $body, ['Content-Type' => 'text/plain; charset=utf-8']);
     }
 
+    /**
+     * JSON response. Encoded with JSON_THROW_ON_ERROR so a non-encodable
+     * value (e.g. a closure leaking into the payload) fails loud at the
+     * controller, not silently in the browser. Marked `Cache-Control:
+     * no-store` because every JSON endpoint here serves authed data.
+     */
+    public static function json(mixed $data, int $status = 200): self
+    {
+        try {
+            $body = json_encode(
+                $data,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+            );
+        } catch (\JsonException $e) {
+            // Encoding failure → 500 with a non-leaky plain body.
+            // Caller's data shape is the bug.
+            return new self(
+                500,
+                'Internal error',
+                ['Content-Type' => 'text/plain; charset=utf-8'],
+            );
+        }
+        return new self($status, $body, [
+            'Content-Type'  => 'application/json; charset=utf-8',
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
     public function withHeader(string $name, string $value): self
     {
         $clone = clone $this;

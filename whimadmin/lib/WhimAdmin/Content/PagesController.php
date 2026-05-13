@@ -8,35 +8,48 @@ use H42\WhimAdmin\Audit\Log as AuditLog;
 use H42\WhimAdmin\Http\Csrf;
 use H42\WhimAdmin\Http\Request;
 use H42\WhimAdmin\Http\Response;
+use H42\WhimAdmin\Pages\RoutesUpdater;
 use H42\WhimAdmin\View\Renderer;
-use H42\WhimCMS\Config as CoreConfig;
 use H42\WhimCMS\Content\ContentNotFoundException;
 use H42\WhimCMS\Content\Identifiers;
 use H42\WhimCMS\Content\ParseException;
 
 /**
- * Page-management controller (Phase 3 + 4).
+ * Block editor + recycler + history controller.
  *
- *   GET  /pages                          listing
- *   GET  /pages/edit?lang&slug           edit form
- *   POST /pages/edit?lang&slug           edit form submit (action-dispatched)
- *   GET  /pages/new                      new-page form
- *   POST /pages/new                      create page
+ * Phase 4a cut the page-meta surface out of this controller — that
+ * now lives exclusively in PagesTreeController (page-types, slug,
+ * url, layout, meta.title/description). What remains here is the
+ * legacy block-level editor (one collapsible card per block, with
+ * action-dispatched POSTs for reorder/cut/paste/add/remove),
+ * accessed at /pages/blocks?lang&slug, plus the recycler and
+ * history sub-views.
  *
- * Edit-form submit actions (POST `action` field):
- *   save                — write current state
+ *   GET  /pages/blocks?lang&slug           block editor
+ *   POST /pages/blocks?lang&slug           block-action dispatch
+ *   GET  /pages/recycler                   soft-deleted pages
+ *   POST /pages/recycler/restore           restore one
+ *   POST /pages/recycler/purge             empty the recycler
+ *   GET  /pages/history?lang&slug          per-page version log
+ *   GET  /pages/history/raw                view one snapshot raw
+ *   POST /pages/history/restore            roll back to a snapshot
+ *
+ * Block-action vocabulary (POST `action` field):
+ *   save                — write current state, redirect to tree-view
  *   add-block           — append new block of `_add_block_type`
  *   remove:<N>          — drop block at index N
  *   move-up:<N>         — swap block N with N-1
  *   move-down:<N>       — swap block N with N+1
  *   cut:<N>             — move block N to clipboard
  *   paste-after:<N>     — insert clipboard contents at N+1; clears clipboard
- *   delete-page         — recycle the entire page (redirect to /pages)
+ *
+ * Page deletion lives in PagesTreeController only — only there can
+ * the .md + routes-entry + overlay-reference triplet be removed
+ * atomically under flock.
  */
 final class PagesController
 {
     private const FORM_ID                = 'page-save';
-    private const FORM_ID_NEW            = 'page-new';
     private const FORM_ID_RECYCLER       = 'page-recycler';
     private const FORM_ID_HISTORY        = 'page-history';
     private const ACTION_PATTERN         = '/^([a-z][a-z-]{0,30})(?::(-?[0-9]+|[a-z][a-z0-9-]*))?$/';
@@ -52,7 +65,12 @@ final class PagesController
     private const ACTION_MOVE_DOWN   = 'move-down';
     private const ACTION_CUT         = 'cut';
     private const ACTION_PASTE_AFTER = 'paste-after';
-    private const ACTION_DELETE_PAGE = 'delete-page';
+    // ACTION_DELETE_PAGE removed: deleting a page through the legacy
+    // block editor only recycled the .md and left the overlay +
+    // routes.php pointing at a vanished slug (visible as phantom in
+    // Unsorted bucket). Page deletion now lives exclusively in the
+    // tree-view editor's context menu, which performs the full
+    // triple-removal atomically under flock.
 
     public function __construct(
         private PageRepository $pages,
@@ -66,43 +84,13 @@ final class PagesController
         private Csrf $csrf,
         private Renderer $views,
         private AuditLog $audit,
+        private RoutesUpdater $routes,
         private string $username,
     ) {
     }
 
     // ============================================================
-    // Listing
-    // ============================================================
-
-    public function list(Request $req): Response
-    {
-        $rows = $this->pages->listAll();
-        // Group by language. listAll() already sorts by [lang, slug] so
-        // a single linear pass suffices.
-        $grouped = [];
-        foreach ($rows as $r) {
-            $lang = $r['lang'];
-            $grouped[$lang] ??= ['lang' => $lang, 'pages' => []];
-            $grouped[$lang]['pages'][] = [
-                'slug'        => $r['slug'],
-                'mtime_human' => $r['mtime'] === 0 ? '' : gmdate('Y-m-d H:i', $r['mtime']),
-            ];
-        }
-        $groups = array_values($grouped);
-        $notice = $req->query('created') === '1' ? 'Page created.' :
-                  ($req->query('deleted') === '1' ? 'Page moved to recycler.' : '');
-        return Response::html($this->views->page('pages/list', [
-            'BASE'        => $req->basePath(),
-            'AUTHED_USER' => $this->username,
-            'CSRF_LOGOUT' => $this->csrf->issue('logout'),
-            'GROUPS'      => $groups,
-            'EMPTY'       => $groups === [] ? 'yes' : '',
-            'NOTICE'      => $notice,
-        ]));
-    }
-
-    // ============================================================
-    // Edit
+    // Edit (block-only — page-meta moved to PagesTreeController)
     // ============================================================
 
     public function edit(Request $req): Response
@@ -145,6 +133,23 @@ final class PagesController
             return $this->renderEditError($req, $lang, $slug, 'Decode failed: ' . $e->getMessage());
         }
 
+        // Page meta now lives exclusively in the tree-view editor —
+        // this form posts blocks only and the legacy template no
+        // longer carries header inputs. Preserve the on-disk header
+        // so a save through this surface never clobbers layout /
+        // meta.title / meta.description / hidden / disabled.
+        try {
+            $existing = $this->pages->load($lang, $slug);
+            $doc->header = $existing->header;
+        } catch (ContentNotFoundException) {
+            // First-time save (rare on /pages/blocks which loads via
+            // GET first). Default to an empty layout key — the new
+            // tree-editor sets a real value on initial create.
+            if ($doc->header === []) {
+                $doc->header = ['layout' => 'default'];
+            }
+        }
+
         $error = null;
         switch ($action) {
             case self::ACTION_SAVE:                                              break;
@@ -154,7 +159,6 @@ final class PagesController
             case self::ACTION_MOVE_DOWN:   $error = $this->actMoveBy($doc,    (int)$arg, +1); break;
             case self::ACTION_CUT:         $error = $this->actCut($doc,       (int)$arg);     break;
             case self::ACTION_PASTE_AFTER: $error = $this->actPasteAfter($doc, (int)$arg);    break;
-            case self::ACTION_DELETE_PAGE: return $this->actDeletePage($req, $lang, $slug);
             default:                       $error = "Unknown action: {$action}";
         }
         if ($error !== null) {
@@ -173,69 +177,20 @@ final class PagesController
             'lang' => $lang, 'slug' => $slug, 'action' => $action,
         ]);
 
-        $url = $req->url('pages/edit') . '?lang=' . urlencode($lang) . '&slug=' . urlencode($slug);
-        if ($action === self::ACTION_SAVE) $url .= '&saved=1';
+        // Save / structural-action redirect:
+        // For ACTION_SAVE → bounce back to the tree-view (page-meta
+        // surface) so the user lands on the canonical editor, not
+        // the legacy form. For block-mutation actions (add-block,
+        // remove, move, cut, paste) → stay on the legacy edit form
+        // since those operations have no equivalent in the tree-view
+        // yet. The deep-link query carries the current page so the
+        // tree-view auto-selects it.
+        if ($action === self::ACTION_SAVE) {
+            $url = $req->url('pages') . '?lang=' . urlencode($lang) . '&slug=' . urlencode($slug);
+            return Response::redirect($url);
+        }
+        $url = $req->url('pages/blocks') . '?lang=' . urlencode($lang) . '&slug=' . urlencode($slug);
         return Response::redirect($url);
-    }
-
-    // ============================================================
-    // Create
-    // ============================================================
-
-    public function newForm(Request $req): Response
-    {
-        return Response::html($this->views->page('pages/new', [
-            'BASE'        => $req->basePath(),
-            'AUTHED_USER' => $this->username,
-            'CSRF_LOGOUT' => $this->csrf->issue('logout'),
-            'CSRF'        => $this->csrf->issue(self::FORM_ID_NEW),
-            'LAYOUTS'     => $this->layoutOptions('default'),
-            'LANGS'       => $this->knownLangs(),
-            'ERROR'       => '',
-            'LANG'        => '',
-            'SLUG'        => '',
-            'TITLE'       => '',
-        ]));
-    }
-
-    public function create(Request $req): Response
-    {
-        if (!$this->csrf->validateFromRequest($req, self::FORM_ID_NEW)) {
-            return $this->renderNewError($req, '', '', '', 'Form expired.');
-        }
-        $lang   = trim((string)$req->post('lang', ''));
-        $slug   = trim((string)$req->post('slug', ''));
-        $title  = trim((string)$req->post('title', ''));
-        $layout = trim((string)$req->post('layout', 'default'));
-
-        if (!Identifiers::isValidLang($lang)) {
-            return $this->renderNewError($req, $lang, $slug, $title, 'Invalid language code.');
-        }
-        if (!Identifiers::isValidSlug($slug)) {
-            return $this->renderNewError($req, $lang, $slug, $title, 'Invalid slug.');
-        }
-        if ($this->pages->exists($lang, $slug)) {
-            return $this->renderNewError($req, $lang, $slug, $title, 'A page with that lang/slug already exists.');
-        }
-        $allowedLayouts = (array)CoreConfig::get('content.allowed_layouts', ['default']);
-        if (!in_array($layout, $allowedLayouts, true)) {
-            return $this->renderNewError($req, $lang, $slug, $title, 'Layout not in allowlist.');
-        }
-
-        $header = ['layout' => $layout];
-        if ($title !== '') {
-            $header['meta'] = ['title' => $title];
-        }
-        $doc = new PageDocument(header: $header, blocks: []);
-        try {
-            $this->pages->save($lang, $slug, $doc);
-        } catch (\Throwable $e) {
-            return $this->renderNewError($req, $lang, $slug, $title, 'Create failed: ' . $e->getMessage());
-        }
-        $this->audit->record('page.create', $req->clientIp(), $this->username, ['lang' => $lang, 'slug' => $slug]);
-        return Response::redirect(
-            $req->url('pages/edit') . '?lang=' . urlencode($lang) . '&slug=' . urlencode($slug) . '&created=1'
-        );
     }
 
     // ============================================================
@@ -290,17 +245,6 @@ final class PagesController
         return null;
     }
 
-    private function actDeletePage(Request $req, string $lang, string $slug): Response
-    {
-        try {
-            $this->pages->delete($lang, $slug);
-        } catch (\Throwable $e) {
-            return $this->renderEditError($req, $lang, $slug, 'Delete failed: ' . $e->getMessage());
-        }
-        $this->audit->record('page.delete', $req->clientIp(), $this->username, ['lang' => $lang, 'slug' => $slug]);
-        return Response::redirect($req->url('pages') . '?deleted=1');
-    }
-
     // ============================================================
     // Recycler
     // ============================================================
@@ -342,6 +286,30 @@ final class PagesController
         } catch (\Throwable $e) {
             $this->audit->record('page.recycler.restore.fail', $req->clientIp(), $this->username, ['file' => $filename, 'error' => $e->getMessage()]);
             return $this->renderRecyclerError($req, $e->getMessage());
+        }
+
+        // Restore-side consistency: deleting a page through the tree
+        // editor removes the .md + routes.php entry + overlay
+        // reference together. Recycle stores only the .md; recovery
+        // must re-add the routes entry so the page is reachable
+        // again. The page lands in the tree-view's "Unsorted" bucket
+        // with URL = slug; the user can move it into a section.
+        // Skip silently when a route is already there (corruption-
+        // tolerant), and audit the routes-add separately so the
+        // forensic trail is clear.
+        $lang = is_string($info['lang'] ?? null) ? $info['lang'] : '';
+        $slug = is_string($info['slug'] ?? null) ? $info['slug'] : '';
+        if ($lang !== '' && $slug !== '' && !$this->routes->slugExists($lang, $slug)) {
+            try {
+                $this->routes->addEntry($lang, $slug, $slug);
+                $this->routes->commit();
+            } catch (\Throwable $e) {
+                $this->audit->record('page.recycler.restore.routes.fail', $req->clientIp(), $this->username, [
+                    'lang' => $lang, 'slug' => $slug, 'error' => $e->getMessage(),
+                ]);
+                // Don't surface — the .md is back; the user can fix
+                // the route via Settings / Routes if needed.
+            }
         }
         $this->audit->record('page.recycler.restore', $req->clientIp(), $this->username, $info);
         return Response::redirect($req->url('pages/recycler') . '?restored=1');
@@ -429,6 +397,23 @@ final class PagesController
             return $this->renderHistoryError($req, $lang, $slug, 'Restore failed: ' . $e->getMessage());
         }
 
+        // Same consistency safeguard as recyclerRestore: if the page
+        // had been deleted before the history-restore, the .md is
+        // now back but routes.php / overlay don't reference it. Add
+        // a default routes entry so it surfaces in the tree-view's
+        // Unsorted bucket. Skip silently when a route is already
+        // there. Failures audit separately.
+        if (!$this->routes->slugExists($lang, $slug)) {
+            try {
+                $this->routes->addEntry($lang, $slug, $slug);
+                $this->routes->commit();
+            } catch (\Throwable $e) {
+                $this->audit->record('page.history.restore.routes.fail', $req->clientIp(), $this->username, [
+                    'lang' => $lang, 'slug' => $slug, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         $this->audit->record('page.history.restore', $req->clientIp(), $this->username, [
             'lang' => $lang, 'slug' => $slug, 'file' => $filename,
         ]);
@@ -472,18 +457,6 @@ final class PagesController
 
     private function renderEdit(Request $req, string $lang, string $slug, PageDocument $page, string $error, string $notice): Response
     {
-        $allLayouts = (array)CoreConfig::get('content.allowed_layouts', ['default']);
-        $currentLayout = is_string($page->header['layout'] ?? null) ? $page->header['layout'] : 'default';
-        $layoutOptions = [];
-        foreach ($allLayouts as $l) {
-            if (!is_string($l)) continue;
-            $layoutOptions[] = ['value' => $l, 'label' => $l, 'selected' => $l === $currentLayout];
-        }
-
-        $meta = is_array($page->header['meta'] ?? null) ? $page->header['meta'] : [];
-        $metaTitle = is_string($meta['title']       ?? null) ? $meta['title']       : '';
-        $metaDesc  = is_string($meta['description'] ?? null) ? $meta['description'] : '';
-
         $hasClipboard = $this->clipboard->has($this->username);
         $blocksHtml = '';
         $allSchemas = $this->schemas->all();
@@ -527,22 +500,19 @@ final class PagesController
         $assetPaths = $this->assetBrowser->allImagePaths(500);
 
         return Response::html($this->views->page('pages/edit', [
-            'BASE'             => $req->basePath(),
-            'AUTHED_USER'      => $this->username,
-            'CSRF'             => $this->csrf->issue(self::FORM_ID),
-            'CSRF_LOGOUT'      => $this->csrf->issue('logout'),
-            'LANG'             => $lang,
-            'SLUG'             => $slug,
-            'LAYOUTS'          => $layoutOptions,
-            'META_TITLE'       => $metaTitle,
-            'META_DESCRIPTION' => $metaDesc,
-            'BLOCKS_HTML'      => $blocksHtml,
-            'BLOCK_TYPES'      => $blockTypeOptions,
-            'HAS_CLIPBOARD'    => $hasClipboard ? 'yes' : '',
-            'ASSET_PATHS'      => $assetPaths,
-            'SITE_ROOT'        => $req->siteRoot(),
-            'ERROR'            => $error,
-            'NOTICE'           => $notice,
+            'BASE'          => $req->basePath(),
+            'AUTHED_USER'   => $this->username,
+            'CSRF'          => $this->csrf->issue(self::FORM_ID),
+            'CSRF_LOGOUT'   => $this->csrf->issue('logout'),
+            'LANG'          => $lang,
+            'SLUG'          => $slug,
+            'BLOCKS_HTML'   => $blocksHtml,
+            'BLOCK_TYPES'   => $blockTypeOptions,
+            'HAS_CLIPBOARD' => $hasClipboard ? 'yes' : '',
+            'ASSET_PATHS'   => $assetPaths,
+            'SITE_ROOT'     => $req->siteRoot(),
+            'ERROR'         => $error,
+            'NOTICE'        => $notice,
         ]));
     }
 
@@ -554,31 +524,6 @@ final class PagesController
             $doc = new PageDocument();
         }
         return $this->renderEdit($req, $lang, $slug, $doc, $error, '');
-    }
-
-    /** @return list<array{value:string, label:string, selected:bool}> */
-    private function layoutOptions(string $current): array
-    {
-        $allLayouts = (array)CoreConfig::get('content.allowed_layouts', ['default']);
-        $out = [];
-        foreach ($allLayouts as $l) {
-            if (!is_string($l)) continue;
-            $out[] = ['value' => $l, 'label' => $l, 'selected' => $l === $current];
-        }
-        return $out;
-    }
-
-    /** @return list<string> */
-    private function knownLangs(): array
-    {
-        $supported = (array)CoreConfig::get('supported_langs', ['en']);
-        $out = [];
-        foreach ($supported as $l) {
-            if (is_string($l) && Identifiers::isValidLang($l)) {
-                $out[] = $l;
-            }
-        }
-        return $out;
     }
 
     /**
@@ -614,22 +559,6 @@ final class PagesController
     {
         if (mb_strlen($s, 'UTF-8') <= $max) return $s;
         return mb_substr($s, 0, $max - 1, 'UTF-8') . '…';
-    }
-
-    private function renderNewError(Request $req, string $lang, string $slug, string $title, string $error): Response
-    {
-        return Response::html($this->views->page('pages/new', [
-            'BASE'        => $req->basePath(),
-            'AUTHED_USER' => $this->username,
-            'CSRF_LOGOUT' => $this->csrf->issue('logout'),
-            'CSRF'        => $this->csrf->issue(self::FORM_ID_NEW),
-            'LAYOUTS'     => $this->layoutOptions('default'),
-            'LANGS'       => $this->knownLangs(),
-            'ERROR'       => $error,
-            'LANG'        => $lang,
-            'SLUG'        => $slug,
-            'TITLE'       => $title,
-        ]), 400);
     }
 
     private function renderRecyclerError(Request $req, string $error): Response

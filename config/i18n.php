@@ -66,5 +66,37 @@ return [
      */
     'i18n_overlay' => [
         'allowed_sections' => ['navigation'],
+
+        /**
+         * Page-tree driver.
+         *
+         * WhimAdmin's split-view page editor renders the tree from one
+         * top-level overlay key (`root`), grouped by a fixed list of
+         * sub-sections under that key. Each section becomes a folder
+         * under every language node in the tree; the editor moves and
+         * mutates only inside these sub-trees.
+         *
+         * `root` must be one of `allowed_sections` above (the overlay
+         * loader's security boundary); the page-tree never bypasses
+         * the allowlist.
+         *
+         * `sections` is the ordered list of editor-managed sub-keys.
+         * For the bundled showcase: `navigation.main` is the header
+         * navigation, `navigation.footer` is the footer link group —
+         * matching the layout in nav-core.html / footer-core.html.
+         *
+         * A theme with a different nav shape (e.g. `navigation.primary`
+         * + `navigation.utility` + `navigation.legal`) just adjusts
+         * this list — WhimAdmin discovers the new folders on next
+         * request without code changes.
+         *
+         * Pages that exist in routes.php but appear in none of the
+         * configured sections show up in an "Unsorted" bucket so the
+         * editor can place or delete them deliberately.
+         */
+        'page_tree' => [
+            'root'     => 'navigation',
+            'sections' => ['main', 'footer'],
+        ],
     ],
 ];

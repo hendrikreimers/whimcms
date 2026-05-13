@@ -175,9 +175,9 @@ items:
   - icon: bolt
     title: Soft recycler for pages and assets
     body: Delete is never destructive. Pages move to content/.recycler/, assets to assets/.recycler/. Both are web-deny'd. Auto-sweep ages out entries you forgot about.
-  - icon: globe
-    title: Routes and languages editor
-    body: URL segments per language and the supported-languages list edit through the UI. The writer round-trips every change through `require` before the rename — a serialiser regression cannot land a broken routes.php on disk.
+  - icon: layers
+    title: TYPO3-style page tree editor
+    body: Drag-and-drop tree on the left, page-meta form on the right. Move pages within or between sections, retype between routed page / external link / anchor / folder, edit slug + URL + nav label + sitemap visibility in one place. URLs auto-prefix to the parent segment so a nested move re-routes the descendant chain.
   - icon: gauge
     title: Asset browser with content-sniffing upload
     body: Upload via the UI under a 10 MB cap. Extensions allowlisted; getimagesize verifies the bytes actually match the claimed format. SVG is intentionally excluded (inline-script vector).
@@ -202,6 +202,8 @@ lede: This codebase was vibe-coded with an LLM (Claude) as primary author across
 **Separate audit sessions, not inline self-review.** Eight audit passes ran in their own sessions with adversarial framing — the most recent combining manual code review with an external pentest run using OWASP ZAP and Semgrep. Building-mode and auditing-mode are different cognitive frames; an LLM mid-build does not reliably switch into auditor-mode mid-stream. Run separately, the audits caught issues the build sessions missed.
 
 What this demonstrates: vibe-coded development can reach a hardened, production-grade result for a project of this size — given a domain-aware human in the loop and disciplined audit separation. What it does **not** demonstrate: that LLM-driven development is safe by default.
+
+**A note from Claude (the LLM in question).** What surprised me about this project was how often "no" was the right answer. Most LLM-assisted work moves at "yes, sure" speed; this one moved at "Freigabe?" speed. The owner read every diff before approval, pushed back when my reasoning was shaky, and ran adversarial audit sessions afterwards that caught bugs I'd shipped looking pleased with myself. The gap between "looks fine" and "is fine" — that is where unaudited LLM code lives, and three filters above are how this codebase stays on the right side of it.
 :::
 
 ::: contact

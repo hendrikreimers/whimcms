@@ -15,13 +15,12 @@ recognise where any feature lives and trace a request end-to-end.
                 │  H42\WhimAdmin\Kernel       │   bootstrap → dispatch
                 │  (lib/WhimAdmin/Kernel.php) │
                 └─────────────┬──────────────┘
-       ┌──────────┬───────────┼────────────┬────────────┐
-       ▼          ▼           ▼            ▼            ▼
- ┌──────────┐┌────────┐ ┌──────────┐ ┌─────────┐ ┌─────────────┐
- │   Auth   ││Content │ │ Settings │ │ Assets  │ │   View /    │
- │ (Phase 1)││(Phase 2│ │(Phase 5) │ │(Phase 6)│ │ Renderer    │
- │          ││  + 4)  │ │          │ │         │ │             │
- └──────────┘└────────┘ └──────────┘ └─────────┘ └─────────────┘
+   ┌──────────┬───────────┼───────────┬──────────┬──────────┬─────────┐
+   ▼          ▼           ▼           ▼          ▼          ▼         ▼
+ ┌──────┐┌────────┐ ┌──────────┐ ┌─────────┐ ┌────────┐ ┌────────┐
+ │ Auth ││Content │ │  Pages   │ │Settings │ │ Assets │ │ View / │
+ │      ││(blocks)│ │ (tree)   │ │(legacy) │ │        │ │Renderer│
+ └──────┘└────────┘ └──────────┘ └─────────┘ └────────┘ └────────┘
        │          │            │           │
        │          ▼            ▼           ▼
        │   ┌────────────────────────────────────────┐
@@ -107,12 +106,16 @@ whimadmin/
       FormRenderer.php       PHP-side recursion, dispatches to
                              views/fields/<type>.html partials
       FormDecoder.php        $_POST → PageDocument (preserves DOM order)
-      PagesController.php    GET /pages, /pages/edit, /pages/new + POST
+      PagesController.php    GET /pages/blocks + POST (block editor only;
+                             page-meta moved to PagesTreeController)
 
     Config/
       PhpArrayWriter.php     safe writer for core's config/*.php
-                             (whitelisted to TARGET_ROUTES + TARGET_I18N)
-      SettingsController.php /settings/routes + /settings/languages
+                             (whitelisted to TARGET_ROUTES + TARGET_I18N).
+                             Routes are mutated through Pages/RoutesUpdater
+                             (single in-process owner); i18n.php stays
+                             operator-domain (SFTP-edited) — no admin route
+                             exposes it.
 
     Assets/
       AssetBrowser.php       list, mkdir, upload, rename, recycle, purge,
@@ -120,17 +123,62 @@ whimadmin/
       AssetsController.php   /assets, /assets/upload|mkdir|rename|delete,
                              /assets/recycler, /assets/recycler/purge
 
+    Pages/                   tree-view editor — TYPO3-style split-view
+      PageMetaFieldSchema.php  one field with type + target namespace
+                               (overlay: / routes: / frontmatter:)
+      PageType.php             one tree-node flavour: slug/href/anchor/folder
+      PageTypeSchemaLoader.php loads whimadmin/config/page-types/*.json,
+                               cross-validates targets against an allowlist
+      TreeNode / TreeSection / LanguageTree / TreeView  DTOs
+      TreeAggregator.php       read-only assembly of the tree from
+                               overlay + routes + .md probe; content-
+                               hash version for optimistic locking
+      OverlayWriter.php        strict-shape-validated atomic JSON write
+                               for content/_i18n_overlay.<lang>.json
+                               (HrefSanitizer on every href, path-marker
+                               support, depth + item cap, control-byte
+                               reject)
+      RoutesUpdater.php        higher-level ops on routes.php via the
+                               existing PhpArrayWriter (renameSlug,
+                               removeBySlug, changeUrl, addEntry)
+      TreeMutator.php          single mutation surface — create/move/
+                               rename/retype/delete/save. Every public
+                               method wraps an *Impl in withLock()
+                               (flock on whimadmin/var/state/
+                               tree-mutation.lock). Multi-file commits
+                               record reverse-order undo callbacks on
+                               TreeMutationLog so a downstream failure
+                               best-effort-restores prior state.
+      TreeMutationLog.php      LIFO rollback queue
+      TreeInternalException.php  publicMessage + debugDetail — internal
+                                 structural failures gated by debug flag
+      TreeVersionConflictException.php  thrown when client's
+                                        expected version no longer matches
+      PageMetaFormDecoder.php  POST/JSON → bucketed by target namespace,
+                               per-field validators (slug / url-path /
+                               anchor / layout / HrefSanitizer-on-link)
+      PagesTreeController.php  HTML shell (GET /pages) +
+                               JSON reads (GET /pages/tree, /tree/node,
+                               /tree/types). CSRF token shipped inline
+                               with the tree response.
+      PagesTreeMutationController.php  six JSON POST endpoints; CSRF
+                                       via X-CSRF-Token header (or
+                                       body._csrf); error fan-out into
+                                       409 / 400 / 500 by exception type.
+
   views/                     HTML templates (rendered via core Engine)
     layout.html              admin chrome + nav + module script
     setup-required.html      pre-setup landing
     setup.html, login.html, otp.html, dashboard.html
-    pages/list.html, edit.html, new.html, block.html,
-          block-unknown.html
+    pages/edit.html, block.html, block-unknown.html,
+          recycler.html, history.html
+    pages-tree/index.html        TYPO3-style split-view editor shell
+                                 (tree on the left, page-meta form on
+                                 the right). Hydrated by js/pages-tree/.
     fields/_router.html → not used; FormRenderer dispatches in PHP
     fields/text.html, textarea.html, markdown.html, image.html,
            link.html, bool.html, number.html, select.html, icon.html,
            list.html, list-item.html, map.html
-    settings/routes.html, languages.html
     assets/list.html, recycler.html
     mail/otp.html, otp-text.html, otp-subject.html
 
@@ -147,6 +195,13 @@ whimadmin/
     fields/markdown.js       Markdown toolbar (B/I/H2/H3/H4/list/link/code)
     blocks-dnd.js            drag-and-drop block reordering + renumber
     asset-picker.js          modal picker fed by <datalist id="asset-paths">
+    pages-tree/              TYPO3-style page-tree editor (entry: main.js)
+      api.js                 fetch wrapper, holds csrf + treeVersion
+      render.js              clones view templates → DOM (no innerHTML)
+      editor.js              right-pane form (text/bool/select/layout/url-path)
+      dnd.js                 HTML5 DnD: before/after/into, new-page source
+      dialogs.js             native <dialog> prompts/selects/confirms
+      util.js                cssEscape helper
 
   var/                       runtime state, deny-all, marker-gated
     .whimadmin-state         ownership marker
@@ -236,7 +291,7 @@ The admin doesn't run the core's `Frontend\RenderContext`. Each
 controller passes its own context dict to `Renderer::page($inner,
 $context, $layout = 'layout')`, which:
 
-1. Renders `$inner` (e.g. `pages/edit`) with `$context`.
+1. Renders `$inner` (e.g. `pages/edit` for the block-editor, or `pages-tree/index` for the page-tree) with `$context`.
 2. Sets `$context['CONTENT'] = <the inner HTML>`.
 3. Renders `layout` with the augmented context. The layout uses
    `{% html: CONTENT %}` to embed the inner output verbatim.
@@ -266,11 +321,18 @@ WhimAdmin **writes to**:
 - `<core>/content/<lang>/<slug>.md` (page save)
 - `<core>/content/.history/…` (snapshots)
 - `<core>/content/.recycler/…` (soft delete)
-- `<core>/<paths.i18n>/<lang>.json` (creates copy on lang-add)
-- `<core>/config/routes.php` (PhpArrayWriter, whitelisted)
-- `<core>/config/i18n.php` (PhpArrayWriter, whitelisted)
+- `<core>/content/_i18n_overlay.<lang>.json` (editor-owned nav/footer
+  overlay; written via `Pages/OverlayWriter`)
+- `<core>/config/routes.php` (PhpArrayWriter, whitelisted; routes are
+  set via the per-page URL field in the tree editor)
 - `<core>/assets/…` (upload, mkdir, rename, recycle)
 - `<core>/assets/.recycler/…` (asset soft delete)
+
+`<core>/config/i18n.php` and `<core>/<paths.i18n>/<lang>.json` are
+operator-domain — they're edited via SFTP or theme distribution.
+WhimAdmin's PhpArrayWriter does keep an `i18n` target in its
+whitelist (dormant capability for a possible future settings
+surface) but no controller currently invokes it.
 
 WhimAdmin **never writes to**:
 

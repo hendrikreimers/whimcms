@@ -1,0 +1,9 @@
+{
+  "label": "In-page anchor",
+  "description": "Navigation item that scrolls to a section on the active page (e.g. #contact). Useful for single-page layouts.",
+  "fields": {
+    "label":  { "type": "text",   "target": "overlay:label",  "required": true, "label": "Navigation label" },
+    "hidden": { "type": "bool",   "target": "overlay:hidden",                   "label": "Hidden in navigation" },
+    "anchor": { "type": "anchor", "target": "overlay:anchor", "required": true, "label": "Anchor id (without #)" }
+  }
+}

@@ -266,12 +266,30 @@ login.otp.ratelimit     logout                 logout.csrf.invalid
 page.save.ok            page.save.fail         page.csrf.invalid
 page.create             page.delete
 page.recycler.restore   page.recycler.restore.fail
+page.recycler.restore.routes.fail
 page.recycler.purge
 page.history.restore    page.history.restore.fail
-settings.routes.save    settings.langs.save
+page.history.restore.routes.fail
+# settings.routes.save / settings.langs.save — REMOVED in Phase 5.
+# Routes are now managed through the tree-view's per-page URL field;
+# language management stays operator-domain (config/i18n.php SFTP-only).
 asset.upload            asset.mkdir            asset.rename
 asset.delete            asset.recycler.purge
 sweep.ok                sweep.fail
+
+# Phase-1 (read-only) tree endpoints emit no audit events — they're GET-
+# only, return JSON, do not mutate. Phase-2 write endpoints reserve the
+# following vocabulary; entries are added here in advance so the audit
+# format is stable across deploys and the writer code can reference
+# constants that match.
+page.tree.create        page.tree.create.fail
+page.tree.move          page.tree.move.fail
+page.tree.rename        page.tree.rename.fail
+page.tree.retype        page.tree.retype.fail
+page.tree.delete        page.tree.delete.fail
+page.tree.save          page.tree.save.fail
+page.tree.csrf.invalid
+page.tree.version-conflict
 ```
 
 Pair with `logrotate` for production. Sensitive fields (`password`,
@@ -295,13 +313,23 @@ Pair with `logrotate` for production. Sensitive fields (`password`,
 
 ### Reverse proxy / CDN
 
-`Session::deriveBindKey` and the `RateLimiter` use
-`$_SERVER['REMOTE_ADDR']` as-is. Behind a CDN (Cloudflare, AWS ALB)
-that becomes the proxy's IP — every visitor shares the rate-limit
-bucket and the session bind. Adapt PHP-FPM / FastCGI to set `HTTPS=on`
-from the proxy AND populate `REMOTE_ADDR` from the trusted proxy
-header (or extend `Request::detectClientIp` with a trusted-proxy
-allowlist analogous to the core's recipe in `_docs/SECURITY.md`).
+`Session::deriveBindKey` and the `RateLimiter` consume the client IP
+from `Request::detectClientIp()`, which delegates to the core's
+`Security\Http\ClientIp::resolve()`. Behind a CDN (Cloudflare, AWS
+ALB, nginx-proxy) the bare `REMOTE_ADDR` is the proxy's IP, which
+would collapse every visitor onto the same rate-limit bucket and
+session-bind key. **Adaptation: configure
+`config/security.php → trusted_proxies` with your upstream's CIDR
+ranges.** The resolver then honours `X-Forwarded-For` only when
+`REMOTE_ADDR` matches the allowlist. Default `trusted_proxies = []`
+is safe-by-default for direct-Apache deployments.
+
+Also adapt PHP-FPM / FastCGI to set `HTTPS=on` from the proxy so
+the `Secure` cookie flag fires correctly. Apache `mod_remoteip` (if
+available) is a recommended belt-and-braces complement — it
+rewrites `REMOTE_ADDR` before PHP sees it, keeping diagnostics
+consistent. See `_docs/SECURITY.md → Reverse proxy / CDN
+adaptation` in the core for the full configuration recipe.
 
 ## Audit cadence
 

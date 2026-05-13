@@ -48,16 +48,18 @@ final class RequestSecurity
     }
 
     /**
-     * Resolve the client IP address. Trusts only `REMOTE_ADDR` —
-     * honouring `X-Forwarded-For` would require an explicit upstream-
-     * proxy allowlist, which the current deployment posture doesn't
-     * have. Returns `0.0.0.0` for any non-IP value (extreme edge: PHP
+     * Resolve the client IP address. Delegates to `ClientIp::resolve`,
+     * which trusts `X-Forwarded-For` only when `REMOTE_ADDR` matches
+     * a CIDR in `config/security.php → trusted_proxies`. With no
+     * `trusted_proxies` configured (default), behaves identically
+     * to the pre-trust-aware bare-REMOTE_ADDR resolution.
+     *
+     * Returns `0.0.0.0` for any non-IP value (extreme edge: PHP
      * running under SAPIs that don't populate `REMOTE_ADDR`).
      */
     public static function clientIp(): string
     {
-        $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-        return filter_var($ip, FILTER_VALIDATE_IP) !== false ? $ip : '0.0.0.0';
+        return ClientIp::resolve();
     }
 
     /**

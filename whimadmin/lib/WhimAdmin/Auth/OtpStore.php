@@ -70,31 +70,68 @@ final class OtpStore
      * Always increments the attempt counter on a failure path so
      * a brute-force grinder hits the cap whether it guesses any
      * digits correctly or not.
+     *
+     * Serialised under an exclusive per-user lock so two parallel
+     * `verify()` calls cannot both pass the loadValid + compare
+     * window before either commits the incremented attempt count.
+     * Without the lock, an aggressively parallelised brute-force
+     * could effectively get ~N guesses per single counter increment
+     * (where N = parallelism). With the lock, each guess always
+     * advances the counter exactly once. Lock fopen failure fails
+     * closed (returns false) so a broken state dir can't silently
+     * disable the attempt cap.
      */
     public function verify(string $username, string $code, ?int $now = null): bool
     {
         $now = $now ?? time();
         $path = $this->pathFor($username);
-        $record = $this->loadValid($path, $now);
-        if ($record === null) {
+        $lockPath = $path . '.lock';
+
+        $this->ensureDir();
+        $lockFh = @fopen($lockPath, 'c');
+        if ($lockFh === false) {
+            \H42\WhimCMS\Log::lastPhpError('OTP verify lock fopen failed', ['path' => $lockPath]);
+            return false; // fail closed
+        }
+        try {
+            // `flock(LOCK_EX)` blocks on POSIX-conformant systems but
+            // can return false on rare paths (signal interrupt, NFS
+            // without proper lockd, OS resource exhaustion). Without
+            // the lock, two parallel `verify()` calls could both pass
+            // `loadValid` + `hash_equals` before either commits the
+            // incremented attempt counter — re-opening the
+            // brute-force-multiplier hole this method exists to close.
+            // Fail closed so the absence of the lock is never silent.
+            if (!@flock($lockFh, LOCK_EX)) {
+                \H42\WhimCMS\Log::lastPhpError('OTP verify flock acquire failed', ['path' => $lockPath]);
+                return false;
+            }
+            @chmod($lockPath, 0o600);
+
+            $record = $this->loadValid($path, $now);
+            if ($record === null) {
+                return false;
+            }
+
+            $expected = hash_hmac('sha256', $code, $this->secret);
+            $match    = hash_equals($record['hmac'], $expected);
+
+            if ($match) {
+                @unlink($path);
+                return true;
+            }
+
+            $record['attempts']++;
+            if ($record['attempts'] >= $record['max_attempts']) {
+                @unlink($path);
+                return false;
+            }
+            $this->writeAtomic($path, $record);
             return false;
+        } finally {
+            @flock($lockFh, LOCK_UN);
+            @fclose($lockFh);
         }
-
-        $expected = hash_hmac('sha256', $code, $this->secret);
-        $match    = hash_equals($record['hmac'], $expected);
-
-        if ($match) {
-            @unlink($path);
-            return true;
-        }
-
-        $record['attempts']++;
-        if ($record['attempts'] >= $record['max_attempts']) {
-            @unlink($path);
-            return false;
-        }
-        $this->writeAtomic($path, $record);
-        return false;
     }
 
     /**

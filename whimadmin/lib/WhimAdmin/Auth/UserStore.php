@@ -38,6 +38,16 @@ final class UserStore
 
     private string $path;
 
+    /**
+     * Process-static cache for the timing-equal dummy hash. Lazily
+     * computed via `password_hash(random_plaintext, PASSWORD_ARGON2ID)`
+     * the first time `verify()` is called without a user record on
+     * disk. Reused for every subsequent no-user verify in the same
+     * PHP-FPM worker so the Argon2id cost is paid at most once per
+     * worker lifetime.
+     */
+    private static ?string $cachedDummyHash = null;
+
     public function __construct(private string $stateDir)
     {
         $authDir = rtrim($stateDir, '/\\') . '/auth';
@@ -94,7 +104,26 @@ final class UserStore
      * user enumeration is blocked.
      *
      * Always runs `password_verify` against SOMETHING (a dummy hash
-     * if no record exists) so timing of the two paths matches.
+     * if no record exists) so the timing of "no user" and "wrong
+     * password" paths matches.
+     *
+     * Two defence-in-depth refinements over a naive verify:
+     *
+     *   1. Username compare uses `hash_equals` on the SHA-256 digest of
+     *      each side. `hash_equals` is constant-time only when both
+     *      operands have the same length — raw `hash_equals($recordUser,
+     *      $postedUser)` would fast-fail (and so leak the username's
+     *      length) when lengths differ. Hashing first normalises both
+     *      sides to 64 hex chars, so the compare is genuinely constant-
+     *      time regardless of input lengths.
+     *
+     *   2. The dummy hash is computed at runtime from `password_hash(
+     *      random_plaintext, PASSWORD_ARGON2ID)` — same cost parameters
+     *      as a real user's hash on this host, no drift if PHP's
+     *      Argon2id defaults change. The plaintext is 32 random bytes
+     *      (hex-encoded), so even if the `$userMatches` guard ever
+     *      regressed, no attacker can craft a password that verifies
+     *      against the dummy.
      *
      * @return array{username:string, email:string, password_hash:string, created:int}|null
      */
@@ -102,16 +131,41 @@ final class UserStore
     {
         $record = $this->load();
 
-        // Dummy hash drives the timing-equal path when no user exists.
-        // Pre-computed with cost-default parameters so it costs roughly
-        // the same as a real verify on this host.
-        $dummyHash = '$argon2id$v=19$m=65536,t=4,p=1$ZHVtbXlzYWx0ZHVtbXlzYWx0$qsbYwkk5Y8aEoUFD3QqsXDihiDLTfrhT/06Sb50pSI4';
-
-        $hashToCheck = $record['password_hash'] ?? $dummyHash;
-        $userMatches = $record !== null && hash_equals($record['username'], $username);
+        $hashToCheck = $record['password_hash'] ?? self::dummyHash();
+        $userMatches = $record !== null
+            && hash_equals(hash('sha256', $record['username']), hash('sha256', $username));
         $passOk = password_verify($password, $hashToCheck);
 
         return ($userMatches && $passOk) ? $record : null;
+    }
+
+    /**
+     * Lazily compute (and cache) an Argon2id hash of a random
+     * throwaway plaintext. Used as the verify-against target when
+     * no user record exists, so the timing of `verify()` is the
+     * same whether the user exists or not.
+     *
+     * Static cache lives across instances within a single PHP
+     * process, so a long-running FPM worker pays the ~hundreds-of-
+     * milliseconds hashing cost at most once.
+     */
+    private static function dummyHash(): string
+    {
+        if (self::$cachedDummyHash !== null) {
+            return self::$cachedDummyHash;
+        }
+        $plaintext = bin2hex(random_bytes(32));
+        $hash = password_hash($plaintext, PASSWORD_ARGON2ID);
+        if (!is_string($hash)) {
+            // Argon2id unavailable in this build — should never happen
+            // on PHP 8.1+ default builds. Fall back to a defensive
+            // sentinel that no `password_verify` can ever match,
+            // keeping the no-user path returning false without leaking
+            // the runtime failure to the client.
+            self::$cachedDummyHash = '$argon2id$v=19$m=65536,t=4,p=1$' . bin2hex(random_bytes(16)) . '$' . bin2hex(random_bytes(32));
+            return self::$cachedDummyHash;
+        }
+        return self::$cachedDummyHash = $hash;
     }
 
     /**

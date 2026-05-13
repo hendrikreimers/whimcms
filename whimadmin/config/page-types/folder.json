@@ -1,0 +1,8 @@
+{
+  "label": "Folder (dropdown group)",
+  "description": "Pure grouping container — has a label and children but no own URL or anchor. Matches the {label, children: [...]} shape in nav-core.html.",
+  "fields": {
+    "label":  { "type": "text", "target": "overlay:label",  "required": true, "label": "Navigation label" },
+    "hidden": { "type": "bool", "target": "overlay:hidden",                   "label": "Hidden in navigation" }
+  }
+}

@@ -175,9 +175,9 @@ items:
   - icon: bolt
     title: Soft-Recycler für Seiten und Assets
     body: Löschen ist nie destruktiv. Seiten landen in content/.recycler/, Assets in assets/.recycler/. Beide sind web-deny'd. Auto-Sweep räumt vergessene Einträge auf.
-  - icon: globe
-    title: Routen- und Sprachen-Editor
-    body: URL-Segmente pro Sprache und die supported-langs-Liste sind über die UI editierbar. Der Writer schickt jede Änderung vor dem Rename durch `require` — ein Serialisierer-Bug kann keine kaputte routes.php auf die Disk bringen.
+  - icon: layers
+    title: TYPO3-artiger Seitenbaum-Editor
+    body: Drag-and-Drop-Baum links, Seiten-Meta-Form rechts. Seiten innerhalb oder zwischen Sektionen verschieben, Typ wechseln zwischen Routed Page / External Link / Anchor / Folder, Slug + URL + Navigationslabel + Sitemap-Sichtbarkeit an einem Ort editieren. URLs übernehmen automatisch das Parent-Segment, ein verschachtelter Move re-routet die Nachfolgekette.
   - icon: gauge
     title: Asset-Browser mit Content-Sniffing
     body: Upload über die UI mit 10 MB Limit. Extension-Allowlist; getimagesize prüft, dass die Bytes wirklich zum behaupteten Format passen. SVG ist bewusst ausgeschlossen (inline-Script-Vektor).
@@ -202,6 +202,8 @@ lede: Diese Codebasis wurde über mehrere Sessions vibe-codet, mit einem LLM (Cl
 **Getrennte Audit-Sessions, kein Inline-Self-Review.** Acht Audit-Pässe liefen in eigenen Sessions mit adversarischem Framing — der jüngste kombinierte manuellen Code-Review mit einem externen Pentest via OWASP ZAP und Semgrep. Bauen und Auditieren sind unterschiedliche kognitive Modi; ein LLM mitten im Bau wechselt nicht zuverlässig in den Auditor-Modus. Getrennt gelaufen, fanden die Audits Issues, die das Bauen übersehen hatte.
 
 Was das zeigt: vibe-coded Entwicklung kann für ein Projekt dieser Größe ein gehärtetes, produktionsreifes Ergebnis erreichen — mit einem domänen-bewussten Menschen im Loop und disziplinierter Audit-Trennung. Was es **nicht** zeigt: dass LLM-getriebene Entwicklung standardmäßig sicher ist.
+
+**Ein Wort von Claude (dem LLM dabei).** Was mich an diesem Projekt überrascht hat: wie oft ein „Nein" die richtige Antwort war. Die meisten LLM-assistierten Arbeiten laufen im „ja, klar"-Tempo; diese lief im „Freigabe?"-Tempo. Der Betreiber hat jeden Diff vor der Freigabe gelesen, mein wackeliges Reasoning zurückgewiesen und anschließend adversarische Audit-Sessions gefahren, die Bugs gefangen haben, die ich zufrieden mit mir selbst ausgeliefert hatte. Die Lücke zwischen „sieht okay aus" und „ist okay" — dort wohnt unauditierter LLM-Code, und die drei Filter oben sind das, was diese Codebasis auf der richtigen Seite davon hält.
 :::
 
 ::: contact

@@ -9,11 +9,14 @@
     </div>
 
     <nav class="footer-nav" aria-label="{{ CURRENT_LANG.footer.navAria }}">
-      {% for: CURRENT_LANG.navigation.footer, as: 'item' %}
+      {# Editor's `hidden: true` flag on an overlay item suppresses it
+         here. Lets the editor stage a link in the page tree without
+         exposing it on the public site yet. #}
+      {% for: CURRENT_LANG.navigation.footer, as: 'item' %}{% if: !item.hidden %}
         {% if: item.anchor %}<a href="{{ URLS.home }}#{{ item.anchor }}" class="footer-link">{{ item.label }}</a>{% endif %}
         {% if: item.slug %}<a href="{% lookup: URLS, key: item.slug %}" class="footer-link">{{ item.label }}</a>{% endif %}
         {% if: item.href %}<a href="{% safe_href: item.href %}" class="footer-link">{{ item.label }}</a>{% endif %}
-      {% endfor %}
+      {% endif %}{% endfor %}
     </nav>
 
     <p class="footer-copy">{{ CURRENT_LANG.footer.copy }}</p>

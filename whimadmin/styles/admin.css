@@ -35,6 +35,17 @@ html, body {
   background: var(--bg);
 }
 
+/* Body becomes a flex column so the page-tree's full-width main can
+   claim the remaining viewport height and host two independently-
+   scrollable panes. Non-fullwidth pages (login, settings, asset list)
+   keep their content-driven height and are unaffected — admin-main's
+   default max-width / padding rules still apply. */
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 a { color: var(--accent); text-underline-offset: 3px; }
 a:hover { text-decoration: underline; }
 
@@ -259,6 +270,14 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   background: transparent;
 }
+/* `.btn` and `[hidden]` carry the same specificity (0,1,0); without
+   this re-statement `.btn`'s `display: inline-block` would win over
+   the UA stylesheet's `[hidden] { display: none }` simply by virtue
+   of being declared later in the cascade. The editor uses `hidden`
+   to gate slug-only buttons (Edit content blocks / History) — without
+   this rule those would stay visible on folder/anchor/href nodes
+   even though the JS dutifully sets `.hidden = true`. */
+.btn[hidden] { display: none; }
 .btn-primary {
   background: var(--accent);
   color: var(--accent-fg);
@@ -288,17 +307,35 @@ a:hover { text-decoration: underline; }
   margin: 0 0 16px;
 }
 
-/* ----- Wider card (page list, edit) ----- */
+/* ----- Wider card (page list, edit) -----
+   Legacy /pages/edit and /pages/list. Lighter card chrome than the
+   compact-card forms to match the split-view editor's flatter look —
+   the legacy edit is now content-blocks-only (page-meta moved to the
+   tree-view editor), and a smaller container suits that scope. */
 .card-wide {
-  max-width: 980px;
+  max-width: 1040px;
+  padding: 24px 28px;
+  box-shadow: none;
+  border-color: var(--border);
 }
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 0 0 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
-.card-header h1 { margin: 0; }
+.card-header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.card-header h1 code {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  margin-inline-start: 4px;
+}
+.card-header .header-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 
 /* ----- Page list ----- */
 .page-list {
@@ -348,12 +385,13 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 10px 14px;
   cursor: pointer;
   list-style: none;
-  background: linear-gradient(#fafafd, #f4f4f7);
+  background: #fafafd;
   border-bottom: 1px solid transparent;
   user-select: none;
+  transition: background .1s;
 }
 .block-summary::-webkit-details-marker { display: none; }
 .block-summary::before {
@@ -367,11 +405,9 @@ a:hover { text-decoration: underline; }
 .block-edit[open] > .block-summary::before { transform: rotate(90deg); }
 .block-edit[open] > .block-summary {
   border-bottom-color: var(--border);
-  background: linear-gradient(#f4f4f7, #ededf2);
+  background: #f4f4f7;
 }
-.block-summary:hover {
-  background: linear-gradient(#f4f4f7, #ededf2);
-}
+.block-summary:hover { background: #f0f0f3; }
 .block-type-tag {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
@@ -503,11 +539,18 @@ a:hover { text-decoration: underline; }
 /* ----- Action bar ----- */
 .actions {
   display: flex;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  position: sticky;
+  bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .06);
 }
+.actions .danger { margin-inline-start: auto; }
 
 .btn-sm {
   padding: 4px 10px;
@@ -733,6 +776,588 @@ a:hover { text-decoration: underline; }
 .asset-picker-empty {
   padding: 32px 20px;
   text-align: center;
+}
+
+/* ==========================================================
+   Pages Tree — split-view editor (Phase 3)
+   ----------------------------------------------------------
+   Sidebar (left) hosts a hierarchical, drag-reorderable tree
+   per language; editor (right) hosts the page-meta form for
+   the selected node plus a deep-link into the legacy content-
+   block editor for slug-type pages. The shell claims the
+   remaining viewport height; sidebar and editor scroll
+   independently.
+   ========================================================== */
+
+/* Full-width main variant — opt-in via MAIN_CLASS=is-fullwidth */
+.admin-main.is-fullwidth {
+  max-width: none;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.pages-tree-shell {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* ----- Sidebar ----- */
+.pages-tree-side {
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pages-tree-header {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.pages-tree-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.pages-tree-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pages-tree-toolbar-link {
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-decoration: none;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.pages-tree-toolbar-link:hover {
+  background: rgba(0, 0, 0, .04);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.pages-tree-newbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px dashed var(--border);
+  background: #fafafd;
+  border-radius: var(--radius);
+  cursor: grab;
+  color: var(--fg);
+  font-family: inherit;
+}
+.pages-tree-newbtn:hover {
+  border-color: var(--accent);
+  background: rgba(0, 102, 255, .04);
+  color: var(--accent);
+}
+.pages-tree-newbtn:active { cursor: grabbing; }
+.pages-tree-newbtn-plus {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+/* When the new-page button is being dragged */
+.pages-tree-newbtn.is-dragging {
+  opacity: .5;
+}
+
+.pages-tree-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 32px;
+}
+.pages-tree-loading {
+  color: var(--fg-muted);
+  padding: 16px;
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ----- Tree nodes ----- */
+.tree-lang {
+  margin: 4px 0 4px;
+}
+.tree-lang > .tree-lang-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+.tree-lang > .tree-lang-summary::-webkit-details-marker { display: none; }
+.tree-lang > .tree-lang-summary::before {
+  content: "▾";
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+  transition: transform .12s;
+}
+.tree-lang:not([open]) > .tree-lang-summary::before { transform: rotate(-90deg); }
+.tree-lang-default-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 999px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.tree-section {
+  margin: 2px 8px 8px 8px;
+}
+.tree-section > .tree-section-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  border-radius: 4px;
+}
+.tree-section > .tree-section-summary:hover { background: rgba(0, 0, 0, .03); }
+.tree-section > .tree-section-summary::-webkit-details-marker { display: none; }
+.tree-section > .tree-section-summary::before {
+  content: "▾";
+  font-size: 9px;
+  width: 10px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+.tree-section:not([open]) > .tree-section-summary::before { transform: rotate(-90deg); }
+.tree-section-unsorted-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  background: #fff4d6;
+  color: #8a6300;
+  border: 1px solid #e8d088;
+  border-radius: 999px;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.tree-section-items {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 0;
+}
+
+.tree-node {
+  margin: 1px 0;
+  position: relative;
+}
+.tree-node-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 10px;
+  margin: 0 6px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+  outline: none;
+  position: relative;
+}
+.tree-node-row:hover {
+  background: rgba(0, 102, 255, .06);
+}
+.tree-node-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+}
+.tree-node-row.is-selected {
+  background: rgba(0, 102, 255, .12);
+  color: var(--fg);
+}
+.tree-node-row.is-dragging {
+  opacity: .35;
+}
+.tree-node-row.is-dimmed {
+  opacity: .5;
+}
+.tree-node-toggle {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 11px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: transform .12s;
+}
+.tree-node-toggle:hover {
+  background: rgba(0, 0, 0, .06);
+  color: var(--fg);
+}
+.tree-node[data-expanded="true"] > .tree-node-row > .tree-node-toggle {
+  transform: rotate(90deg);
+}
+/* Tree-nodes without children get an empty 20px slot so labels in
+   sibling rows still align. */
+.tree-node-toggle[hidden] {
+  display: inline-flex !important;
+  visibility: hidden;
+}
+.tree-node-type-badge {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 14px;
+  color: var(--accent-fg);
+  flex-shrink: 0;
+}
+.tree-node-type-badge[data-type="slug"]   { background: var(--accent); }
+.tree-node-type-badge[data-type="href"]   { background: #6b6b70; }
+.tree-node-type-badge[data-type="anchor"] { background: #008f5c; }
+.tree-node-type-badge[data-type="folder"] { background: #b88a00; }
+
+.tree-node-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-node-label.is-placeholder {
+  font-style: italic;
+  color: var(--fg-muted);
+}
+
+.tree-node-flags {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.tree-node-flag {
+  display: inline-block;
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: 999px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  line-height: 14px;
+  font-weight: 600;
+}
+.tree-node-flag.is-hidden   { background: #f0f0f3; color: var(--fg-muted); }
+.tree-node-flag.is-disabled { background: var(--danger-bg); color: var(--danger-fg); border: 1px solid var(--danger-border); padding: 0 4px; line-height: 12px; }
+.tree-node-flag.is-warning  { background: #fff4d6; color: #8a6300; }
+
+.tree-node-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.tree-node-menu-trigger {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tree-node-menu-trigger:hover {
+  border-color: var(--border);
+  background: var(--bg-card);
+  color: var(--fg);
+}
+
+.tree-node-children {
+  list-style: none;
+  padding: 0;
+  margin: 1px 0 0 18px;
+  border-left: 1px solid var(--border);
+}
+
+/* ----- Drag-and-drop indicators ----- */
+.tree-node-row.is-dropzone-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+.tree-node-row.is-dropzone-after  { box-shadow: inset 0 -2px 0 0 var(--accent); }
+.tree-node-row.is-dropzone-into   {
+  background: rgba(0, 102, 255, .12);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.tree-section-summary.is-dropzone {
+  background: rgba(0, 102, 255, .12);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* ----- Context menu ----- */
+.tree-menu {
+  position: absolute;
+  z-index: 50;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.tree-menu button {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+}
+.tree-menu button:hover { background: rgba(0, 102, 255, .08); }
+.tree-menu button:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+.tree-menu button.is-danger { color: var(--danger-fg); }
+.tree-menu button.is-danger:hover { background: var(--danger-bg); }
+.tree-menu button[hidden] { display: none; }
+
+/* ----- Editor pane ----- */
+.pages-tree-editor {
+  overflow-y: auto;
+  padding: 24px 32px;
+  background: var(--bg);
+  min-width: 0;
+}
+.pages-editor-placeholder {
+  max-width: 520px;
+  margin: 80px auto;
+  padding: 32px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  color: var(--fg-muted);
+}
+.pages-editor-placeholder p { margin: 0 0 8px; }
+.pages-editor-placeholder p:last-child { margin: 0; }
+
+.editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.editor-title { margin: 0; font-size: 20px; }
+.editor-subtitle { margin: 4px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.editor-type-switcher {
+  display: inline-flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  flex-shrink: 0;
+}
+.editor-type-switcher label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--fg-muted);
+}
+.editor-type-switcher label.is-selected {
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+.editor-type-switcher input { position: absolute; opacity: 0; pointer-events: none; }
+.editor-type-switcher input:focus-visible + span,
+.editor-type-switcher label:focus-within { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+.editor-form {
+  max-width: 640px;
+}
+.editor-fields > .field { margin-bottom: 18px; }
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+}
+.editor-status { font-size: 13px; color: var(--fg-muted); }
+.editor-status.is-error   { color: var(--danger-fg); }
+.editor-status.is-success { color: #008f5c; }
+
+/* Inline field — checkbox + label horizontally */
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 15px;
+}
+.field-inline .field-label { margin: 0; }
+.field-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.field-hint { display: block; margin-top: 4px; }
+
+/* ----- Dialogs ----- */
+.tree-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+  background: var(--bg-card);
+  color: var(--fg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .25);
+  min-width: 360px;
+  max-width: 520px;
+}
+.tree-dialog::backdrop { background: rgba(20, 20, 25, .5); }
+.tree-dialog-form { padding: 24px; }
+.tree-dialog-title { margin: 0 0 8px; font-size: 17px; }
+.tree-dialog-message { margin: 0 0 16px; font-size: 13px; }
+.tree-dialog-error {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-border);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.tree-dialog-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.tree-dialog-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.tree-dialog-options label:hover { border-color: var(--accent); }
+.tree-dialog-options label.is-selected { border-color: var(--accent); background: rgba(0, 102, 255, .06); }
+.tree-dialog-options input { margin-top: 2px; }
+.tree-dialog-options .opt-label   { font-weight: 600; display: block; font-size: 13px; }
+.tree-dialog-options .opt-desc    { color: var(--fg-muted); font-size: 12px; display: block; }
+.tree-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn.is-danger {
+  background: var(--danger-fg);
+  border-color: var(--danger-fg);
+  color: #fff;
+}
+.btn.is-danger:hover {
+  background: #8b1b1b;
+  border-color: #8b1b1b;
+}
+
+/* Inline error banner above the tree — populated by main.js after
+   non-recoverable mutation failures. Class-only style; the JS sets
+   only `textContent` so CSP-compliant. */
+.pages-tree-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-bottom: 1px solid var(--danger-border);
+  font-size: 13px;
+}
+.pages-tree-banner-msg {
+  flex: 1;
+  line-height: 1.4;
+}
+.pages-tree-banner-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--danger-fg);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.pages-tree-banner-close:hover {
+  background: rgba(178, 34, 34, .12);
+}
+
+/* ----- Responsive collapse (small screens) ----- */
+@media (max-width: 800px) {
+  .pages-tree-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .pages-tree-side {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    max-height: 50vh;
+  }
 }
 
 /* ----- Reduced motion ----- */

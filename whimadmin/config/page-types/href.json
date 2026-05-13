@@ -1,0 +1,9 @@
+{
+  "label": "External link",
+  "description": "Navigation item pointing to an external URL or a cross-language / cross-site link. No own page rendered.",
+  "fields": {
+    "label":  { "type": "text", "target": "overlay:label",  "required": true, "label": "Navigation label" },
+    "hidden": { "type": "bool", "target": "overlay:hidden",                   "label": "Hidden in navigation" },
+    "href":   { "type": "link", "target": "overlay:href",   "required": true, "label": "Target URL" }
+  }
+}

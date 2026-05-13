@@ -200,13 +200,12 @@ Several defences key off the **client IP**:
   = IP + UA, `'ua'` = UA-only, `'none'` = no client binding).
 - Mail audit log (`MailLog`) — HMAC-keyed IP hash per send.
 
-The IP comes from `$_SERVER['REMOTE_ADDR']` only — see
-`Security\Http\RequestSecurity::clientIp()`. With direct hosting
-(Apache talks to the visitor) that's correct.
+The IP comes from `Security\Http\ClientIp::resolve()`, which on a
+direct-Apache deployment is functionally `$_SERVER['REMOTE_ADDR']`.
 
 **Behind a CDN, reverse proxy, or load balancer** (Cloudflare, Fastly,
 nginx, K8s ingress, …) every request arrives with `REMOTE_ADDR` set
-to the proxy's IP. Then:
+to the proxy's IP. Without adaptation:
 
 - Every visitor shares the same rate-limit bucket → quickly self-DoSes.
 - One bot strikes → everyone gets blocked.
@@ -219,37 +218,53 @@ to the proxy's IP. Then:
   everyone in lockstep.
 - Mail-log "ip_hash" is the same for everyone.
 
-**Adaptation required.** Add a small allowlist of trusted upstream
-proxy IPs to `Security\Http\RequestSecurity::clientIp()` and read
-the real client from the forwarding header — but **only** when the
-request came from one of those allowlisted upstreams:
+**Adaptation: configure `trusted_proxies`.** Set the CIDR ranges of
+your upstream proxies in `config/security.php → trusted_proxies`.
+`ClientIp::resolve()` honours `X-Forwarded-For` *only* when
+`REMOTE_ADDR` matches one of those ranges, and picks the rightmost
+untrusted IP from the XFF chain as the real client. With the list
+empty (the default), behaviour is identical to bare `REMOTE_ADDR` —
+safe by default for direct deployments.
 
 ```php
-private static function clientIp(): string
-{
-    $remote = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-    $trustedProxies = ['10.0.0.0/8', '203.0.113.42'];   // <-- your hop(s)
-    if (self::ipInAny($remote, $trustedProxies)) {
-        $xff = (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
-        foreach (array_reverse(array_map('trim', explode(',', $xff))) as $hop) {
-            if ($hop !== '' && filter_var($hop, FILTER_VALIDATE_IP) !== false
-                && !self::ipInAny($hop, $trustedProxies)) {
-                return $hop;
-            }
-        }
-    }
-    return filter_var($remote, FILTER_VALIDATE_IP) !== false ? $remote : '0.0.0.0';
-}
+// config/security.php
+'trusted_proxies' => [
+    '10.0.0.0/8',         // your private network
+    '127.0.0.1/32',       // localhost (e.g. nginx in front of Apache)
+    '173.245.48.0/20',    // Cloudflare proxy range — keep current
+    // ... more CIDRs as needed
+],
 ```
 
-Never trust `X-Forwarded-For` without the trusted-proxy gate. If you
-do, anyone can spoof their source IP and bypass the rate limit, the
-blocklist, and the CSRF binding.
+Recommended belt-and-braces: also configure Apache's `mod_remoteip`
+so `REMOTE_ADDR` is rewritten BEFORE PHP sees it. The values then
+agree: `REMOTE_ADDR` becomes the real client, and `X-Forwarded-For`
+gets a sanitized chain. WhimCMS's `ClientIp::resolve()` works
+correctly either way (with or without mod_remoteip), but having
+both consistent makes diagnostics easier.
+
+```apache
+# In vhost or .htaccess (mod_remoteip must be enabled)
+RemoteIPHeader X-Forwarded-For
+RemoteIPInternalProxy 10.0.0.0/8
+RemoteIPInternalProxy 127.0.0.1
+# For Cloudflare, list their published ranges (refreshed periodically):
+RemoteIPTrustedProxy 173.245.48.0/20
+RemoteIPTrustedProxy 103.21.244.0/22
+# ... see https://www.cloudflare.com/ips/
+```
+
+Never list `0.0.0.0/0` or other wide ranges in `trusted_proxies` —
+that effectively disables the gate and lets a direct attacker spoof
+their source IP via `curl -H 'X-Forwarded-For: 1.2.3.4' ...`. List
+only the proxies whose XFF you genuinely trust.
 
 If the upstream uses a vendor-specific header (Cloudflare's
-`CF-Connecting-IP`, Akamai's `True-Client-IP`), prefer that over
-`X-Forwarded-For` — those headers are rewritten by the vendor on
-every hop, so a spoofed value never survives.
+`CF-Connecting-IP`, Akamai's `True-Client-IP`), the resolver doesn't
+read it — but those headers are stable single-hop values that you
+can have Apache rewrite into `REMOTE_ADDR` via `mod_remoteip` with
+`RemoteIPHeader CF-Connecting-IP`, achieving the same effect with
+narrower trust surface.
 
 ### Error path
 
@@ -310,7 +325,7 @@ open items, verification checklist for re-running.
 - `var/state/` and `var/cache/` writable, **not** web-accessible?
 - `_htaccess_production` renamed to `.htaccess` (or parent
   `.htaccess` already enforces equivalent)?
-- Behind a CDN/proxy? `Security\Http\RequestSecurity::clientIp()` adapted?
+- Behind a CDN/proxy? `config/security.php → trusted_proxies` populated with the upstream CIDR ranges? (Optional: `mod_remoteip` belt-and-braces in Apache.)
 - `js/` and `styles/` cache-busted (`config/app.php → globals.CACHE_BUSTER`)
   if you've changed assets since the last deploy?
 

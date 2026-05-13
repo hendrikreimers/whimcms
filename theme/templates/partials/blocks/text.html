@@ -1,0 +1,23 @@
+{@ block
+  optional: id title align
+@}
+{# Block: text — the "plain prose" workhorse. A Markdown body wrapped
+   in a centred container, optional title rendered as h2, optional
+   alignment switch (start / center).
+
+   Use this when you need running copy without the magazine-style
+   eyebrow + lede pattern that `prose` carries. The body is rendered
+   from the same safe-subset Markdown renderer (paragraphs, h2-h4,
+   ul, inline code, links, fenced code blocks, **strong**, *em*).
+
+   Expects:
+     attrs.title?   plain text, em allowed via {!! … !!}
+     attrs.align?   "start" | "center" (default: start)
+     attrs.id?      anchor id for in-page linking
+   plus the block's Markdown body. #}
+<section class="block block-text{% if: attrs.align == 'center' %} block-text-center{% endif %}"{% if: attrs.id %} id="{{ attrs.id }}"{% endif %}>
+  <div class="container">
+    {% if: attrs.title %}<h2 class="block-text-title">{!! attrs.title !!}</h2>{% endif %}
+    <div class="reveal block-text-body">{% html: body %}</div>
+  </div>
+</section>

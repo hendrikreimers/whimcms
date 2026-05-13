@@ -45,8 +45,25 @@ use H42\WhimCMS\Content\ParseException;
  */
 final class PageDocument
 {
-    private const HEADER_ALLOWED_KEYS = ['layout', 'meta'];
+    // Mirrored from the core's PageLoader::HEADER_ALLOWED_KEYS — drift
+    // here means the editor can save a .md the public site can't read,
+    // or vice versa. Also mirrored at:
+    //   whimadmin/lib/WhimAdmin/Pages/PageTypeSchemaLoader.php
+    //     → ALLOWED_FRONTMATTER_KEYS
+    // — adding a key here without updating that allowlist means a page-
+    // type schema with the new frontmatter target would still be
+    // rejected at boot.
+    //
+    // `hidden` controls sitemap inclusion; `disabled` hides the page
+    // from the public renderer entirely. Both are scalar booleans in
+    // the source, parsed as strings and normalised by the public-side
+    // loader.
+    private const HEADER_ALLOWED_KEYS = ['layout', 'meta', 'hidden', 'disabled'];
     private const META_ALLOWED_KEYS   = ['title', 'description'];
+
+    /** Accepted string forms for the boolean front-matter flags. */
+    private const BOOL_TRUE_FORMS  = ['true', 'yes', '1'];
+    private const BOOL_FALSE_FORMS = ['false', 'no', '0', ''];
 
     /**
      * @param array<string, mixed> $header  Front-matter tree.
@@ -471,6 +488,20 @@ final class PageDocument
                 if (!is_string($k) || !isset($allowedMeta[$k])) {
                     throw new ParseException("Unexpected meta key '" . (string)$k . "'.", 1);
                 }
+            }
+        }
+        foreach (['hidden', 'disabled'] as $flag) {
+            if (!array_key_exists($flag, $header)) continue;
+            $v = $header[$flag];
+            if (!is_string($v)) {
+                throw new ParseException("Front-matter '{$flag}' must be a string ('true'/'false').", 1);
+            }
+            $lower = strtolower(trim($v));
+            if (!in_array($lower, self::BOOL_TRUE_FORMS, true)
+                && !in_array($lower, self::BOOL_FALSE_FORMS, true)) {
+                throw new ParseException(
+                    "Front-matter '{$flag}' must be one of true/yes/1/false/no/0 (got '{$v}').", 1
+                );
             }
         }
     }

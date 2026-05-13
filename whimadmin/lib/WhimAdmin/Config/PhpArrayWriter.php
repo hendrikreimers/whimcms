@@ -83,6 +83,20 @@ final class PhpArrayWriter
             @unlink($tmp);
             throw new \RuntimeException("Cannot finalise config file: {$path}");
         }
+
+        // OPcache + stat cache invalidation: routes.php / i18n.php are
+        // `require`d on every read path (RoutesUpdater::readAll,
+        // TreeAggregator::loadRoutesForLang, the public-site Config).
+        // If the host has `opcache.validate_timestamps=0` the cached
+        // bytecode would keep returning the pre-write array even
+        // though the file on disk now holds the new content — the
+        // editor would appear to "lose" every save. Clearing stat
+        // cache too defends against a stale `filemtime/realpath`
+        // memoised within the same request lifecycle.
+        clearstatcache(true, $path);
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($path, true);
+        }
     }
 
     /**

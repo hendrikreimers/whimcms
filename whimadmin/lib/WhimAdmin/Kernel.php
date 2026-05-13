@@ -17,7 +17,6 @@ use H42\WhimAdmin\Assets\AssetBrowser;
 use H42\WhimAdmin\Assets\AssetsController;
 use H42\WhimAdmin\Auth\UserStore;
 use H42\WhimAdmin\Config\PhpArrayWriter;
-use H42\WhimAdmin\Config\SettingsController;
 use H42\WhimAdmin\Content\BlockSchemaLoader;
 use H42\WhimAdmin\Content\ClipboardStore;
 use H42\WhimAdmin\Content\FormDecoder;
@@ -33,6 +32,15 @@ use H42\WhimAdmin\Http\Request;
 use H42\WhimAdmin\Http\Response;
 use H42\WhimAdmin\Http\Router;
 use H42\WhimAdmin\Maintenance\RecyclerSweeper;
+use H42\WhimAdmin\Pages\OverlayWriter;
+use H42\WhimAdmin\Pages\PageMetaFormDecoder;
+use H42\WhimAdmin\Pages\PageTypeSchemaLoader;
+use H42\WhimAdmin\Pages\PagesTreeController;
+use H42\WhimAdmin\Pages\PagesTreeMutationController;
+use H42\WhimAdmin\Pages\RoutesUpdater;
+use H42\WhimAdmin\Pages\Tree\TreeAggregator;
+use H42\WhimAdmin\Pages\Tree\TreeMutator;
+use H42\WhimAdmin\Pages\Tree\UrlDeriver;
 use H42\WhimAdmin\Path\PathResolver;
 use H42\WhimAdmin\View\Renderer;
 use H42\WhimCMS\Config as CoreConfig;
@@ -83,11 +91,19 @@ final class Kernel
     private ClipboardStore $clipboard;
     private PhpArrayWriter $configWriter;
     private string $coreConfigDir;
-    private string $coreI18nDir;
     private AssetBrowser $assetBrowser;
     private HistoryStore $contentHistory;
     private Recycler $contentRecycler;
     private RecyclerSweeper $recyclerSweeper;
+    private PageTypeSchemaLoader $pageTypes;
+    private TreeAggregator $treeAggregator;
+    private OverlayWriter $overlayWriter;
+    private RoutesUpdater $routesUpdater;
+    private TreeMutator $treeMutator;
+    private PageMetaFormDecoder $pageMetaDecoder;
+    private string $treeRoot;
+    /** @var list<string> */
+    private array $treeOverlayAllowedSections;
 
     public function __construct(string $rootDir, string $coreRootDir)
     {
@@ -212,11 +228,95 @@ final class Kernel
         $this->clipboard = new ClipboardStore($this->paths['state'], $this->secret);
 
         $this->coreConfigDir = $this->coreRootDir . DIRECTORY_SEPARATOR . 'config';
-        $i18nRel = (string)CoreConfig::get('paths.i18n', 'theme/i18n');
-        $this->coreI18nDir = $i18nRel === '.' ? $this->coreRootDir : $this->coreRootDir . DIRECTORY_SEPARATOR . $i18nRel;
         $this->configWriter = new PhpArrayWriter($this->coreConfigDir);
 
         $this->assetBrowser = new AssetBrowser($this->coreRootDir . DIRECTORY_SEPARATOR . 'assets');
+
+        $this->pageTypes = new PageTypeSchemaLoader(
+            configDir: $this->rootDir . '/config/page-types',
+        );
+
+        // Tree-driver config — read-only consumed from the core's
+        // config/i18n.php. The theme/operator owns these knobs;
+        // WhimAdmin reacts to whatever values are present, with
+        // defaults that match the bundled showcase if a key is
+        // missing so a half-configured install still boots.
+        $treeRoot     = (string)CoreConfig::get('i18n_overlay.page_tree.root', 'navigation');
+        $treeSections = (array)CoreConfig::get('i18n_overlay.page_tree.sections', ['main', 'footer']);
+        $supportedLangs = (array)CoreConfig::get('supported_langs', ['en']);
+        $defaultLang    = (string)CoreConfig::get('default_lang', 'en');
+
+        // Filter the operator-supplied lists down to safe string values
+        // — the aggregator already re-checks per item, but a defective
+        // config (non-string entries) should never reach a filesystem
+        // call site.
+        $supportedLangs = array_values(array_filter($supportedLangs, 'is_string'));
+        $treeSections   = array_values(array_filter($treeSections,   'is_string'));
+
+        $this->treeAggregator = new TreeAggregator(
+            supportedLangs:    $supportedLangs,
+            defaultLang:       $defaultLang,
+            treeRoot:          $treeRoot,
+            configuredSections: $treeSections,
+            overlayDir:        $contentAbs,
+            routesPath:        $this->coreRootDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'routes.php',
+            contentDir:        $contentAbs,
+        );
+
+        // Write-side services for tree mutations. The overlay writer
+        // is path-bound to the same content dir the aggregator reads
+        // from; the routes updater shares the PhpArrayWriter, the
+        // single whitelisted writer to `config/routes.php`.
+        $contentRealDir = realpath($contentAbs);
+        if ($contentRealDir === false) {
+            throw new \RuntimeException("Content directory not resolvable for overlay writer: {$contentAbs}");
+        }
+        $this->overlayWriter = new OverlayWriter(
+            overlayDir:     $contentAbs,
+            contentRealDir: $contentRealDir,
+        );
+        $allowedOverlaySections = (array)CoreConfig::get('i18n_overlay.allowed_sections', ['navigation']);
+        $allowedOverlaySections = array_values(array_filter($allowedOverlaySections, 'is_string'));
+        $this->treeRoot = $treeRoot;
+        $this->treeOverlayAllowedSections = $allowedOverlaySections;
+
+        $this->routesUpdater = new RoutesUpdater(
+            writer:     $this->configWriter,
+            routesPath: $this->coreRootDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'routes.php',
+        );
+
+        // URL derivation helper — extracted from TreeMutator for the
+        // refactor; injects RoutesUpdater so deriveParentSegment + the
+        // cascade can read + mutate routes under the same flock + log
+        // discipline as the rest of the tree mutation pipeline.
+        $treeUrlDeriver = new UrlDeriver(
+            routes:   $this->routesUpdater,
+            treeRoot: $treeRoot,
+        );
+
+        $this->treeMutator = new TreeMutator(
+            overlayWriter:           $this->overlayWriter,
+            routes:                  $this->routesUpdater,
+            pages:                   $this->pageRepo,
+            recycler:                $this->contentRecycler,
+            urls:                    $treeUrlDeriver,
+            contentDir:              $contentAbs,
+            contentRealDir:          $contentRealDir,
+            treeRoot:                $treeRoot,
+            allowedOverlaySections:  $allowedOverlaySections,
+            configuredSections:      $treeSections,
+            aggregator:              $this->treeAggregator,
+            stateDir:                $this->paths['state'],
+        );
+        // Layout cross-check: the decoder rejects layout values that
+        // aren't in the core's allowed_layouts allowlist before the
+        // save reaches the .md writer. Without it, the editor would
+        // silently accept any kebab-case layout name and the public
+        // site would render with the default fallback — confusing
+        // and hard to debug.
+        $allowedLayouts = (array)CoreConfig::get('content.allowed_layouts', ['default']);
+        $allowedLayouts = array_values(array_filter($allowedLayouts, 'is_string'));
+        $this->pageMetaDecoder = new PageMetaFormDecoder($allowedLayouts);
 
         $rec = (array)Config::get('recycler', []);
         $this->recyclerSweeper = new RecyclerSweeper(
@@ -284,6 +384,23 @@ final class Kernel
         /** @var Response $response */
         $response = $handler($req);
         $response->send();
+    }
+
+    /**
+     * Preserve `?lang=` and `?slug=` across the legacy → canonical
+     * URL redirects so a bookmarked /pages/edit?lang=en&slug=imprint
+     * lands on /pages/blocks?lang=en&slug=imprint, not the bare
+     * canonical path. Other query params are dropped on purpose —
+     * we don't promise stability for them.
+     */
+    private function preserveLangSlug(Request $req): string
+    {
+        $parts = [];
+        $lang = $req->query('lang', '');
+        $slug = $req->query('slug', '');
+        if ($lang !== null && $lang !== '') $parts[] = 'lang=' . urlencode($lang);
+        if ($slug !== null && $slug !== '') $parts[] = 'slug=' . urlencode($slug);
+        return $parts === [] ? '' : ('?' . implode('&', $parts));
     }
 
     private function dispatchFirstRun(Request $req): Response
@@ -406,24 +523,29 @@ final class Kernel
                 csrf:          $csrf,
                 views:         $this->renderer,
                 audit:         $this->audit,
+                routes:        $this->routesUpdater,
                 username:      (string)($session['user'] ?? ''),
             )
             : null;
 
         $router->add('GET', '', fn(Request $r) => ($g = $authGuard($r)) ?? Response::redirect($r->url('pages')));
 
-        $router->add('GET', 'pages', fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $pagesController->list($r));
-
-        $router->add('GET',  'pages/new', fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $pagesController->newForm($r));
-        $router->add('POST', 'pages/new', fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $pagesController->create($r));
-
-        $router->add('GET',  'pages/edit', fn(Request $r) =>
+        // /pages = the tree-view (canonical pages URL after Phase 4a
+        // cleanup). The block editor moved to /pages/blocks; the
+        // legacy flat list at /pages and the /pages/new form are gone.
+        $router->add('GET',  'pages/blocks', fn(Request $r) =>
             ($g = $authGuard($r)) ?? $pagesController->edit($r));
-        $router->add('POST', 'pages/edit', fn(Request $r) =>
+        $router->add('POST', 'pages/blocks', fn(Request $r) =>
             ($g = $authGuard($r)) ?? $pagesController->save($r));
+
+        // Back-compat: bookmarks / cached form-actions hitting the
+        // old paths land softly on the canonical equivalents.
+        $router->add('GET',  'pages/tree-view', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? Response::redirect($r->url('pages') . $this->preserveLangSlug($r)));
+        $router->add('GET',  'pages/edit',      fn(Request $r) =>
+            ($g = $authGuard($r)) ?? Response::redirect($r->url('pages/blocks') . $this->preserveLangSlug($r)));
+        $router->add('POST', 'pages/edit',      fn(Request $r) =>
+            ($g = $authGuard($r)) ?? Response::redirect($r->url('pages/blocks') . $this->preserveLangSlug($r)));
 
         // Page recycler
         $router->add('GET',  'pages/recycler',         fn(Request $r) =>
@@ -441,26 +563,68 @@ final class Kernel
         $router->add('POST', 'pages/history/restore', fn(Request $r) =>
             ($g = $authGuard($r)) ?? $pagesController->historyRestore($r));
 
-        $settingsController = $session !== null && $session['stage'] === 'authed'
-            ? new SettingsController(
-                writer:        $this->configWriter,
-                coreConfigDir: $this->coreConfigDir,
-                i18nDir:       $this->coreI18nDir,
-                csrf:          $csrf,
-                views:         $this->renderer,
-                audit:         $this->audit,
-                username:      (string)($session['user'] ?? ''),
+        // /settings/routes and /settings/languages removed in
+        // Phase 5: route + language management is now exclusively
+        // surfaced through the tree-view editor (per-page URL field +
+        // overlay sections). Languages stay operator-domain
+        // (config/i18n.php is SFTP-edited). Old bookmarks 404.
+
+        // ----- Page tree (read-only JSON) -----
+        // Phase 1 of the split-view editor rebuild. Coexists with the
+        // legacy /pages/* form-based editor — both work simultaneously
+        // until the UI in Phase 3 cuts over.
+        $pagesTreeController = $session !== null && $session['stage'] === 'authed'
+            ? new PagesTreeController(
+                aggregator: $this->treeAggregator,
+                pageTypes:  $this->pageTypes,
+                pages:      $this->pageRepo,
+                csrf:       $csrf,
+                audit:      $this->audit,
+                views:      $this->renderer,
+                username:   (string)($session['user'] ?? ''),
             )
             : null;
 
-        $router->add('GET',  'settings/routes',    fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $settingsController->routesForm($r));
-        $router->add('POST', 'settings/routes',    fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $settingsController->routesSave($r));
-        $router->add('GET',  'settings/languages', fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $settingsController->languagesForm($r));
-        $router->add('POST', 'settings/languages', fn(Request $r) =>
-            ($g = $authGuard($r)) ?? $settingsController->languagesSave($r));
+        $router->add('GET', 'pages', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeController->index($r));
+        $router->add('GET', 'pages/tree', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeController->tree($r));
+        $router->add('GET', 'pages/tree/types', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeController->types($r));
+        $router->add('GET', 'pages/tree/node', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeController->node($r));
+
+        // ----- Page tree mutations (JSON POST, CSRF-guarded) -----
+        // Each operation is one POST endpoint. Both `X-CSRF-Token`
+        // header (preferred) and `_csrf` in the JSON body are
+        // accepted. The controller's `FORM_ID = 'tree'` is shared
+        // across all mutation endpoints so the editor's UI re-uses a
+        // single token across DnD interactions.
+        $pagesTreeMutationController = $session !== null && $session['stage'] === 'authed'
+            ? new PagesTreeMutationController(
+                mutator:    $this->treeMutator,
+                pageTypes:  $this->pageTypes,
+                decoder:    $this->pageMetaDecoder,
+                aggregator: $this->treeAggregator,
+                csrf:       $csrf,
+                audit:      $this->audit,
+                username:   (string)($session['user'] ?? ''),
+                debug:      $this->debug,
+            )
+            : null;
+
+        $router->add('POST', 'pages/tree/create', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeMutationController->create($r));
+        $router->add('POST', 'pages/tree/move',   fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeMutationController->move($r));
+        $router->add('POST', 'pages/tree/rename', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeMutationController->rename($r));
+        $router->add('POST', 'pages/tree/retype', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeMutationController->retype($r));
+        $router->add('POST', 'pages/tree/delete', fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeMutationController->delete($r));
+        $router->add('POST', 'pages/tree/save',   fn(Request $r) =>
+            ($g = $authGuard($r)) ?? $pagesTreeMutationController->save($r));
 
         $assetsController = $session !== null && $session['stage'] === 'authed'
             ? new AssetsController(

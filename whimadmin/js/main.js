@@ -8,6 +8,15 @@ import './fields/markdown.js';
 import './blocks-dnd.js';
 import './asset-picker.js';
 
+// Pages-tree split-view bootstraps only when its shell element is in
+// the DOM — most admin pages won't have it, dynamic-import keeps the
+// transfer cost off those pages. ES-module-only, no bundler; the
+// import path is resolved by the browser against the current document
+// base.
+if (document.querySelector('[data-pages-tree-shell]')) {
+  import('./pages-tree/main.js');
+}
+
 // Generic confirm-on-click for any element with `data-confirm`.
 // Avoids inline `onclick=` so the strict CSP stays intact.
 document.addEventListener('click', (event) => {

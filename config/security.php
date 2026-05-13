@@ -107,4 +107,49 @@ return [
         'fail_window'     => 1800,  // 30 minutes for strikes to add up
         'block_duration'  => 1800,  // 30 minutes block on threshold hit
     ],
+
+    // =================================================================
+    // TRUSTED PROXIES (X-Forwarded-For handling)
+    // =================================================================
+
+    /**
+     * Behind a reverse proxy (Cloudflare, AWS ALB, nginx-proxy,
+     * fastly, …) the bare `REMOTE_ADDR` is the proxy's IP, not the
+     * client's. With this list empty (the default), WhimCMS uses
+     * `REMOTE_ADDR` as-is and ignores `X-Forwarded-For` entirely —
+     * the safe-by-default posture for direct-Apache deployments.
+     *
+     * If you deploy behind a proxy you control, list its source IP
+     * ranges here. The resolver will then read `X-Forwarded-For`
+     * ONLY when `REMOTE_ADDR` is in the list, and pick the
+     * rightmost untrusted IP from the chain as the real client.
+     *
+     * **Crucially**: list ONLY proxies whose XFF header you trust.
+     * Listing 0.0.0.0/0 effectively disables the gate and lets any
+     * direct attacker spoof their source IP via `curl -H
+     * 'X-Forwarded-For: ...'`. Stick to CIDRs of YOUR upstream
+     * infrastructure.
+     *
+     * Format: list of CIDR strings (IPv4 or IPv6).
+     *
+     * Examples:
+     *   - Cloudflare: list their published proxy ranges, e.g.
+     *     `'173.245.48.0/20', '103.21.244.0/22', …`
+     *     (see https://www.cloudflare.com/ips/ — update periodically)
+     *   - Same-host nginx in front of Apache: `'127.0.0.1/32', '::1/128'`
+     *   - Docker bridge: `'172.17.0.0/16'`
+     *
+     * If you run behind a CDN, ALSO configure Apache `mod_remoteip`
+     * with `RemoteIPHeader X-Forwarded-For` and `RemoteIPInternalProxy
+     * <cidr>` for each entry above. mod_remoteip rewrites REMOTE_ADDR
+     * before PHP sees it, which feeds this resolver the proxy IP
+     * (matching the allowlist) and the chain in XFF.
+     *
+     * Operator burden: keep this list current with your upstream's
+     * actual IP ranges. A stale entry just means the gate stops
+     * recognising that proxy and visitors via it get bucketed onto
+     * the proxy IP again — degrading throttling but not breaking
+     * anything.
+     */
+    'trusted_proxies' => [],
 ];

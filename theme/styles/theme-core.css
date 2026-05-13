@@ -341,6 +341,34 @@ body.theme-core {
 .theme-core .block-sub-hero-title { font-size: clamp(2rem, 4vw, 3rem); margin-block-end: var(--space-4); }
 .theme-core .block-sub-hero-lede { font-size: 1.125rem; color: var(--c-muted); max-width: 40rem; }
 
+/* ----- Text (plain Markdown section) ----- */
+.theme-core .block-text { padding-block: var(--space-7); }
+.theme-core .block-text-title { font-size: clamp(1.5rem, 3vw, 2rem); margin-block-end: var(--space-5); max-width: var(--container-tight); margin-inline: auto; }
+.theme-core .block-text-center .block-text-title { text-align: center; }
+.theme-core .block-text-body { max-width: var(--container-tight); margin-inline: auto; line-height: 1.75; }
+.theme-core .block-text-center .block-text-body { text-align: center; }
+.theme-core .block-text-body :is(p, ul, ol) + :is(p, ul, ol, h2, h3, h4) { margin-block-start: var(--space-5); }
+.theme-core .block-text-body h2 { font-size: 1.5rem; margin-block-start: var(--space-7); margin-block-end: var(--space-4); }
+.theme-core .block-text-body h3 { font-size: 1.25rem; margin-block-start: var(--space-6); margin-block-end: var(--space-3); }
+.theme-core .block-text-body h4 { font-size: 1.05rem; margin-block-start: var(--space-5); margin-block-end: var(--space-3); }
+.theme-core .block-text-body ul, .theme-core .block-text-body ol { padding-inline-start: 1.5rem; }
+.theme-core .block-text-body li { color: var(--c-muted); }
+.theme-core .block-text-body code {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-hover);
+  padding: 0.125em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.theme-core .block-text-body pre {
+  background: var(--c-accent-soft);
+  border-radius: 6px;
+  padding: var(--space-4);
+  overflow-x: auto;
+  font-size: 0.9em;
+}
+.theme-core .block-text-body pre code { background: transparent; padding: 0; }
+
 /* ----- Prose ----- */
 .theme-core .block-prose-body { max-width: var(--container-tight); margin-inline: auto; line-height: 1.75; }
 .theme-core .block-prose-body :is(p, ul, ol) + :is(p, ul, ol, h2, h3) { margin-block-start: var(--space-5); }

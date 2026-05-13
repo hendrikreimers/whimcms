@@ -1,0 +1,187 @@
+<section class="pages-tree-shell"
+         data-pages-tree-shell
+         data-base="{{ BASE }}"
+         data-site-root="{{ SITE_ROOT }}">
+
+  <aside class="pages-tree-side" aria-label="Page tree">
+    <header class="pages-tree-header">
+      <h1 class="pages-tree-title">Pages</h1>
+      <div class="pages-tree-toolbar">
+        <button class="pages-tree-newbtn"
+                type="button"
+                data-new-page
+                draggable="true"
+                title="Drag onto a section, or onto another page"
+                aria-label="Create a new page — drag to position">
+          <span class="pages-tree-newbtn-plus" aria-hidden="true">+</span>
+          <span class="pages-tree-newbtn-label">New page</span>
+        </button>
+        <a class="pages-tree-toolbar-link"
+           href="{{ BASE }}/pages/recycler"
+           title="Restore or purge soft-deleted pages">Recycler →</a>
+      </div>
+    </header>
+    <div class="pages-tree-body" data-pages-tree>
+      <p class="pages-tree-loading">Loading…</p>
+    </div>
+  </aside>
+
+  <section class="pages-tree-editor" aria-label="Page editor" data-pages-editor>
+    <div class="pages-editor-placeholder" data-editor-placeholder>
+      <p>Select a page from the tree to edit its meta.</p>
+      <p class="muted small">Drag pages within or between sections to reorder. Drop the “+ New page” button onto a section to create a new entry.</p>
+    </div>
+  </section>
+
+  {# -- Templates cloned by js/pages-tree/render.js. Every dynamic
+       value is set via textContent or attribute; never innerHTML, to
+       keep the CSP intact and to defend against any drift in the
+       JSON shape. -- #}
+
+  <template data-tmpl="lang">
+    <details class="tree-lang" open>
+      <summary class="tree-lang-summary">
+        <span class="tree-lang-label" data-slot="label"></span>
+        <span class="tree-lang-default-badge" data-slot="default-badge" hidden>default</span>
+      </summary>
+      <div class="tree-lang-sections" data-slot="sections"></div>
+    </details>
+  </template>
+
+  <template data-tmpl="section">
+    <details class="tree-section" open data-section-key>
+      <summary class="tree-section-summary">
+        <span class="tree-section-label" data-slot="label"></span>
+        <span class="tree-section-unsorted-badge" data-slot="unsorted-badge" hidden>unsorted</span>
+      </summary>
+      <ul class="tree-section-items" data-slot="items"></ul>
+    </details>
+  </template>
+
+  <template data-tmpl="node">
+    <li class="tree-node" data-tree-node>
+      <div class="tree-node-row" tabindex="0" draggable="true" role="treeitem">
+        <button class="tree-node-toggle" type="button" data-toggle hidden aria-label="Toggle children">▸</button>
+        <span class="tree-node-type-badge" data-slot="type-badge"></span>
+        <span class="tree-node-label" data-slot="label"></span>
+        <span class="tree-node-flags" data-slot="flags"></span>
+        <div class="tree-node-actions">
+          <button class="tree-node-menu-trigger"
+                  type="button"
+                  data-menu-trigger
+                  aria-label="Page actions"
+                  aria-haspopup="true"
+                  aria-expanded="false">⋯</button>
+        </div>
+      </div>
+      <ul class="tree-node-children" data-slot="children" hidden></ul>
+    </li>
+  </template>
+
+  <template data-tmpl="menu">
+    <div class="tree-menu" role="menu" tabindex="-1">
+      <button type="button" role="menuitem" data-action="add-child">Add child page…</button>
+      <button type="button" role="menuitem" data-action="rename" data-only-slug>Rename slug…</button>
+      <button type="button" role="menuitem" data-action="retype">Change type…</button>
+      <button type="button" role="menuitem" data-action="open-content" data-only-slug>Edit content blocks →</button>
+      <button type="button" role="menuitem" data-action="open-history" data-only-slug>History →</button>
+      <button type="button" role="menuitem" data-action="delete" class="is-danger">Delete</button>
+    </div>
+  </template>
+
+  <template data-tmpl="editor">
+    <div class="editor-root">
+      <header class="editor-header">
+        <div class="editor-header-titles">
+          <h2 class="editor-title" data-slot="title">Edit page</h2>
+          <p class="editor-subtitle muted small" data-slot="subtitle"></p>
+        </div>
+        <div class="editor-type-switcher" role="radiogroup" aria-label="Page type" data-slot="type-switcher"></div>
+      </header>
+      <form class="editor-form" data-editor-form novalidate>
+        <div class="editor-fields" data-slot="fields"></div>
+        <div class="editor-actions">
+          <button class="btn btn-primary" type="submit" data-slot="save-btn">Save</button>
+          <button class="btn btn-ghost" type="button" data-action="open-content" data-only-slug hidden>Edit content blocks →</button>
+          <button class="btn btn-ghost" type="button" data-action="open-history" data-only-slug hidden>History →</button>
+          <span class="editor-status" data-slot="status" role="status" aria-live="polite"></span>
+        </div>
+      </form>
+    </div>
+  </template>
+
+  <template data-tmpl="editor-field-text">
+    <label class="field">
+      <span class="field-label" data-slot="label"></span>
+      <input class="field-input" type="text" data-slot="input">
+      <span class="field-hint muted small" data-slot="hint" hidden></span>
+    </label>
+  </template>
+
+  <template data-tmpl="editor-field-textarea">
+    <label class="field">
+      <span class="field-label" data-slot="label"></span>
+      <textarea class="field-input" rows="3" data-slot="input"></textarea>
+    </label>
+  </template>
+
+  <template data-tmpl="editor-field-bool">
+    <label class="field field-inline">
+      <input class="field-checkbox" type="checkbox" data-slot="input">
+      <span class="field-label" data-slot="label"></span>
+    </label>
+  </template>
+
+  <template data-tmpl="editor-field-select">
+    <label class="field">
+      <span class="field-label" data-slot="label"></span>
+      <select class="field-input" data-slot="input"></select>
+    </label>
+  </template>
+
+  <template data-tmpl="dialog-prompt">
+    <dialog class="tree-dialog">
+      <form method="dialog" class="tree-dialog-form">
+        <h3 class="tree-dialog-title" data-slot="title"></h3>
+        <p class="tree-dialog-message muted" data-slot="message" hidden></p>
+        <label class="field">
+          <span class="field-label" data-slot="label"></span>
+          <input class="field-input" type="text" data-slot="input">
+        </label>
+        <p class="tree-dialog-error" role="alert" data-slot="error" hidden></p>
+        <div class="tree-dialog-actions">
+          <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+          <button type="submit" value="ok" class="btn btn-primary">OK</button>
+        </div>
+      </form>
+    </dialog>
+  </template>
+
+  <template data-tmpl="dialog-select">
+    <dialog class="tree-dialog">
+      <form method="dialog" class="tree-dialog-form">
+        <h3 class="tree-dialog-title" data-slot="title"></h3>
+        <p class="tree-dialog-message muted" data-slot="message" hidden></p>
+        <div class="tree-dialog-options" data-slot="options"></div>
+        <div class="tree-dialog-actions">
+          <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+          <button type="submit" value="ok" class="btn btn-primary">OK</button>
+        </div>
+      </form>
+    </dialog>
+  </template>
+
+  <template data-tmpl="dialog-confirm">
+    <dialog class="tree-dialog">
+      <form method="dialog" class="tree-dialog-form">
+        <h3 class="tree-dialog-title" data-slot="title">Are you sure?</h3>
+        <p class="tree-dialog-message" data-slot="message"></p>
+        <div class="tree-dialog-actions">
+          <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+          <button type="submit" value="ok" class="btn btn-primary is-danger" data-slot="ok-btn">Confirm</button>
+        </div>
+      </form>
+    </dialog>
+  </template>
+
+</section>

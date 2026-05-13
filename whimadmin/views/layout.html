@@ -18,8 +18,6 @@
       <nav class="admin-nav" aria-label="Sections">
         <a href="{{ BASE }}/pages">Pages</a>
         <a href="{{ BASE }}/assets">Assets</a>
-        <a href="{{ BASE }}/settings/routes">Routes</a>
-        <a href="{{ BASE }}/settings/languages">Languages</a>
       </nav>
       <form method="POST" action="{{ BASE }}/logout" class="admin-logout">
         <input type="hidden" name="_csrf" value="{{ CSRF_LOGOUT }}">
@@ -29,7 +27,7 @@
       {% endif %}
     </div>
   </header>
-  <main id="main" class="admin-main">
+  <main id="main" class="admin-main{% if: MAIN_CLASS %} {{ MAIN_CLASS }}{% endif %}">
     {% html: CONTENT %}
   </main>
   <script type="module" src="{{ BASE }}/js/main.js"></script>

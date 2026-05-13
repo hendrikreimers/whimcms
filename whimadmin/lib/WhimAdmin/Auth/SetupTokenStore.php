@@ -68,12 +68,38 @@ final class SetupTokenStore
         $now = $now ?? time();
         $this->ensureDir();
 
+        // Lock acquisition failure fails LOUD. If `fopen('c')` on the
+        // lockfile fails, the state dir is unwritable — and every
+        // subsequent atomic-write inside the issuance path would
+        // fail anyway. A silent fallback to the unlocked path would
+        // open a race: two parallel first-run requests could each
+        // issue a different random token; one process writes HMAC
+        // file A then plaintext A, the other interleaves HMAC B
+        // between, leaving HMAC=A but plaintext=B on disk after the
+        // dust settles. The operator copies the wrong plaintext,
+        // retries, "Invalid token" — confusion for no security gain.
+        // Better to surface the underlying error early.
         $lockFh = @fopen($this->lockPath, 'c');
         if ($lockFh === false) {
-            return $this->maybeIssueUnlocked($now);
+            \H42\WhimCMS\Log::lastPhpError('SetupToken lock fopen failed', ['path' => $this->lockPath]);
+            throw new \RuntimeException(
+                'Cannot acquire setup-token lock. Check that whimadmin/var/state is writable by the PHP process.'
+            );
         }
         try {
-            @flock($lockFh, LOCK_EX);
+            // `flock(LOCK_EX)` blocks on POSIX-conformant systems but
+            // can return false on rare paths (signal interrupt, NFS
+            // without proper lockd, OS resource exhaustion). Without
+            // the lock, two parallel first-run boots could each issue
+            // a fresh token concurrently — exactly the race this
+            // method was rewritten to close. Fail loud so the absence
+            // of the lock isn't silently bypassed.
+            if (!@flock($lockFh, LOCK_EX)) {
+                \H42\WhimCMS\Log::lastPhpError('SetupToken flock acquire failed', ['path' => $this->lockPath]);
+                throw new \RuntimeException(
+                    'Cannot lock setup-token state. Filesystem may not support advisory locking (NFS without lockd, etc.).'
+                );
+            }
             $existing = $this->loadValid($now);
             if ($existing !== null) {
                 return null;
@@ -138,15 +164,6 @@ final class SetupTokenStore
     }
 
     // ----- internals -----
-
-    private function maybeIssueUnlocked(int $now): ?string
-    {
-        $existing = $this->loadValid($now);
-        if ($existing !== null) {
-            return null;
-        }
-        return $this->writeNewToken($now);
-    }
 
     /**
      * Atomically write both the HMAC record and the plaintext sidecar.

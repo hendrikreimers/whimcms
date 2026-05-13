@@ -1,0 +1,16 @@
+{
+  "label": "Routed page",
+  "description": "A page with its own URL and Markdown content. Renders through the active theme's block library.",
+  "fields": {
+    "label":          { "type": "text",      "target": "overlay:label",                "required": true, "label": "Navigation label" },
+    "hidden":         { "type": "bool",      "target": "overlay:hidden",                                 "label": "Hidden in navigation" },
+    "slug":           { "type": "slug",      "target": "routes:slug",                  "required": true, "label": "Slug (filename, stable identifier)" },
+    "url":            { "type": "url-path",  "target": "routes:url",                   "required": true, "label": "URL path (localised)" },
+    "layout":         { "type": "layout",    "target": "frontmatter:layout",                             "label": "Layout" },
+    "metaTitle":      { "type": "text",      "target": "frontmatter:meta.title",                         "label": "Meta title (HTML <title>)" },
+    "metaDesc":       { "type": "textarea",  "target": "frontmatter:meta.description",                   "label": "Meta description" },
+    "hiddenSitemap":  { "type": "bool",      "target": "frontmatter:hidden",                             "label": "Hidden in sitemap" },
+    "disabled":       { "type": "bool",      "target": "frontmatter:disabled",                           "label": "Disabled (404 on public site)" }
+  }
+}
+

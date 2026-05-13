@@ -1,0 +1,10 @@
+{
+  "label": "Text",
+  "description": "Plain Markdown section — optional title, then a body rendered through the safe-subset Markdown renderer. The default choice for running copy.",
+  "fields": {
+    "title": { "type": "text",   "label": "Title (em allowed)" },
+    "align": { "type": "select", "options": ["start", "center"], "default": "start" },
+    "id":    { "type": "text",   "label": "Anchor id (without #)" }
+  },
+  "body": { "type": "markdown", "label": "Body (Markdown — B / I / H2-H4 / list / link / inline code / code block)" }
+}

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace H42\WhimAdmin\Http;
 
+use H42\WhimCMS\Security\Http\ClientIp;
 use H42\WhimCMS\Security\Http\RequestSecurity;
 
 /**
@@ -19,11 +20,22 @@ use H42\WhimCMS\Security\Http\RequestSecurity;
  */
 final class Request
 {
+    /** Hard cap on JSON request bodies — high enough for a full tree
+     * mutation payload, low enough to refuse abuse. The same 64 KiB
+     * limit the core's ContactPostHandler uses. */
+    private const MAX_JSON_BYTES = 65536;
+
     /** @var array<int|string, mixed> nested string-tree from $_GET */
     private array $get;
 
     /** @var array<int|string, mixed> nested string-tree from $_POST */
     private array $post;
+
+    /** @var array<int|string, mixed>|null lazy-parsed JSON body */
+    private ?array $jsonBody = null;
+
+    /** @var bool|null lazy: was a JSON body load attempted yet */
+    private ?bool $jsonAttempted = null;
 
     private string $method;
     private string $path;          // path AFTER the basePath, leading slash stripped
@@ -175,6 +187,104 @@ final class Request
         return $this->post;
     }
 
+    /**
+     * Read and parse the JSON request body once, return cached result.
+     *
+     * Reads `php://input` directly (not `$_POST`, which is form-only
+     * for `application/x-www-form-urlencoded` and `multipart/form-data`).
+     * Hard-caps the body at MAX_JSON_BYTES measured against the actual
+     * input length, NOT the client-supplied Content-Length header.
+     * Sanitises the decoded tree with the same depth-bounded recursion
+     * as form data — JSON leaves must be strings, bools, or null;
+     * numbers are coerced to strings to match the form-encoded shape
+     * the downstream decoder consumes.
+     *
+     * Returns an empty array on any failure (missing body, parse error,
+     * size cap, non-array root). Caller can distinguish "no body" from
+     * "bad body" via `jsonHadError()`.
+     *
+     * @return array<int|string, mixed>
+     */
+    public function jsonBody(): array
+    {
+        if ($this->jsonAttempted !== null) {
+            return $this->jsonBody ?? [];
+        }
+        $this->jsonAttempted = true;
+        $raw = @file_get_contents('php://input', false, null, 0, self::MAX_JSON_BYTES + 1);
+        if (!is_string($raw) || $raw === '') {
+            return $this->jsonBody = [];
+        }
+        if (strlen($raw) > self::MAX_JSON_BYTES) {
+            return $this->jsonBody = [];
+        }
+        try {
+            $decoded = json_decode($raw, true, 16, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return $this->jsonBody = [];
+        }
+        if (!is_array($decoded)) {
+            return $this->jsonBody = [];
+        }
+        return $this->jsonBody = self::sanitiseJsonTree($decoded);
+    }
+
+    /**
+     * Read a single HTTP request header in a sanitised form.
+     *
+     * Lookup is by canonical header name (e.g. "X-CSRF-Token"); PHP's
+     * SAPI mangling to `HTTP_X_CSRF_TOKEN` happens here. Returns the
+     * default for absent headers OR for headers whose only legal
+     * characters were stripped down to empty.
+     *
+     * Control bytes (`\x00-\x1F`, `\x7F`) are stripped — defence in
+     * depth for any future log-line or other downstream consumer.
+     */
+    public function header(string $name, string $default = ''): string
+    {
+        $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+        if (!isset($_SERVER[$key])) {
+            return $default;
+        }
+        $raw = (string)$_SERVER[$key];
+        $clean = preg_replace('/[\x00-\x1F\x7F]/', '', $raw) ?? '';
+        return $clean === '' ? $default : $clean;
+    }
+
+    /**
+     * JSON-leaf sanitiser. Mirrors sanitiseTree() but is permissive on
+     * leaf types: booleans become 'true'/'false' strings, numbers
+     * stringify, null becomes ''. This keeps the downstream decoder
+     * uniform — form-encoded and JSON-encoded payloads decode through
+     * the same string-typed leaves.
+     *
+     * @param array<int|string, mixed> $arr
+     * @return array<int|string, mixed>
+     */
+    private static function sanitiseJsonTree(array $arr, int $depth = 0): array
+    {
+        if ($depth > 16) {
+            return [];
+        }
+        $out = [];
+        foreach ($arr as $k => $v) {
+            if (!is_string($k) && !is_int($k)) continue;
+            if (is_string($v)) {
+                $out[$k] = $v;
+            } elseif (is_bool($v)) {
+                $out[$k] = $v ? 'true' : 'false';
+            } elseif (is_int($v) || is_float($v)) {
+                $out[$k] = (string)$v;
+            } elseif ($v === null) {
+                $out[$k] = '';
+            } elseif (is_array($v)) {
+                $out[$k] = self::sanitiseJsonTree($v, $depth + 1);
+            }
+            // Other types (objects, resources) silently dropped.
+        }
+        return $out;
+    }
+
     /** Build a base-path-prefixed URL for redirects/links. */
     public function url(string $relPath = ''): string
     {
@@ -219,8 +329,12 @@ final class Request
 
     private static function detectClientIp(): string
     {
-        $remote = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-        return filter_var($remote, FILTER_VALIDATE_IP) !== false ? $remote : '0.0.0.0';
+        // Delegate to the shared core resolver — honours
+        // `config/security.php → trusted_proxies` so admin requests
+        // behind a reverse proxy see the real client IP for rate-
+        // limiting and session-binding, instead of every visitor
+        // collapsing onto the single proxy address.
+        return ClientIp::resolve();
     }
 
     private static function headerString(string $key): string

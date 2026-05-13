@@ -49,24 +49,36 @@ every theme — same HTML, restyled by CSS. That's the design point.
 
 ## Editor vs. engineer
 
-WhimCMS has no admin UI, but it does have a clean editor/engineer
-split. An optional file `content/_i18n_overlay.<lang>.json` merges
-editor-controlled overrides on top of the theme's `i18n/<lang>.json`
-at load time, gated by an allowlist in `config/i18n.php`. The
-editor uses it for:
+WhimCMS has a clean editor/engineer split — engineers ship the
+theme, editors steer content + nav + page-meta without ever
+touching template files.
 
-- Nav structure (items, order, labels, dropdowns)
-- Per-page meta overrides (title, description)
-- Footer copy
+The split has two surfaces:
 
-The theme stays editor-untouchable. The core theme's nav partial
-demonstrates the pattern — it renders generically from the overlay,
-so adding a nav item or reordering is a JSON edit, not a template
-edit. The four demo themes keep their nav hardcoded (single-page
-showcases), illustrating the contrast.
+**1. File-level edit (the always-available path).** Push a `.md`
+under `content/<lang>/`, reload the browser, done. No build, no
+admin UI, no cache flush. An optional `content/_i18n_overlay.
+<lang>.json` deep-merges editor overrides onto the theme's
+`i18n/<lang>.json` at load time, gated by an allowlist in
+`config/i18n.php`. The overlay carries nav structure, per-page
+meta overrides, and footer copy. The four demo themes keep their
+nav hardcoded (single-page showcases); the core theme's
+`nav-core.html` renders generically from the overlay, illustrating
+the editor-managed path.
+
+**2. WhimAdmin (the optional UI path).** Sits in `whimadmin/` as
+a separate directory inside the same repository. Single-user,
+two-factor login (password + mail OTP), TYPO3-style split-view
+page-tree editor with drag-and-drop, per-page Markdown-block
+editor, soft recycler, per-page version history, asset browser.
+Hand-written PHP, no Composer, same audit-grade defenses as the
+public site. **Optional** — if you don't deploy the `whimadmin/`
+directory, the public site runs identically and the file-level
+edit path remains the only way to update content.
 
 See [`_docs/CONTENT.md → Editor overlay file`](./_docs/CONTENT.md#editor-overlay-file)
-for the format and security model.
+for the overlay format and security model, and `whimadmin/README.md`
+for the admin's threat model.
 
 ## Why this exists (and why not WordPress / TYPO3)
 
@@ -81,7 +93,7 @@ What this project deliberately doesn't have, by comparison:
 |---|---|
 | Plugin ecosystem with weekly-CVE treadmill | No plugins. What's in the repo is what runs. |
 | Theme marketplace shipping arbitrary PHP | No themes. Templates are author-edited HTML. |
-| `wp-admin` / backend as login attack surface | No admin UI. Editor edits nav + labels via a JSON overlay in `content/`; engineers manage themes separately. SSH + text editor. |
+| `wp-admin` / backend as login attack surface | Editor surface is **optional**: WhimAdmin (separate directory, same repo) is single-user, two-factor, no plugin loader, deletable. If you don't want it, omit it on deploy — the public site runs without. Files still edit fine via SSH + text editor. |
 | Composer dependency tree → supply-chain risk | No `vendor/`, no `composer.lock`. |
 | Database → SQL-injection class to defend against | No DB. Content is files. |
 | JS build pipeline (`node_modules/`, webpack, …) | No build step. ES modules served as-is. |

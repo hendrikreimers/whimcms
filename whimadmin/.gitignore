@@ -1,0 +1,15 @@
+# ============================================================
+# WhimAdmin — local additions to project-root .gitignore
+# ============================================================
+#
+# The root .gitignore handles `var/` and `.tmp_*` recursively
+# (those patterns have no slash, so they match at any depth).
+#
+# This file only needs to add what the root pattern misses:
+# `_docs/audits/` in the root has a slash in the middle, so it
+# matches only the root-level path. The whimadmin/_docs/audits/
+# tree needs its own rule here.
+
+# Internal hardening notes / per-session audit reports.
+# Not part of the public WhimAdmin distribution.
+_docs/audits/
