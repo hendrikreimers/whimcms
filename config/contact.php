@@ -36,6 +36,24 @@ return [
         'enabled' => true,
 
         /**
+         * Pages whose POST is routed to the contact pipeline.
+         *
+         * The WhimCMS Kernel only hands a POST to the contact handler
+         * when the resolved page slug is in this list; the handler then
+         * binds its PRG redirect / success URL / error re-render to that
+         * resolved page (so /contact and the camp landing round-trip to
+         * themselves, not to home).
+         *
+         * Default (key absent): ['home'] — the historical behaviour.
+         * Every pipeline gate (CSRF / captcha / honeypot / rate-limit /
+         * the `enabled` switch above) is unchanged and still applies on
+         * every listed page; this only widens *which* page accepts the
+         * already-gated POST. Slugs come from the validated route table,
+         * never from raw request input.
+         */
+        'post_slugs' => ['contact'],
+
+        /**
          * Per-field validation rules. Keys are HTML form input names.
          * Values are rule arrays — keep types/orders below in sync with
          * lib/WhimCMS/Validator.php.

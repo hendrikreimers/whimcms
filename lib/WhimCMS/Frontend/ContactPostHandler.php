@@ -73,7 +73,11 @@ final class ContactPostHandler
 
     /**
      * Run the contact-form POST pipeline for a request whose route
-     * resolved to the home page.
+     * resolved to a configured contact page (config/contact.php →
+     * contact.post_slugs; default ['home']). Success redirect, PRG
+     * target and error re-render are all bound to the resolved page,
+     * so a dedicated /contact or camp-landing page round-trips to
+     * itself instead of to home.
      *
      * @param array<string, mixed> $resolved {lang, slug, …} from Router
      */
@@ -109,20 +113,25 @@ final class ContactPostHandler
 
         $clientIp   = RequestSecurity::clientIp();
         $bindKey    = RequestSecurity::clientBindKey();
-        $langRoutes = $this->routes[$resolved['lang']] ?? [];
-        $homeUrl    = Router::canonicalUrl('home', $resolved['lang'], $langRoutes, $this->basePath, $this->singleLang);
-        $successUrl = $homeUrl . '?sent=1#contact';
+        $lang       = $resolved['lang'];
+        $slug       = (string)$resolved['slug'];
+        $langRoutes = $this->routes[$lang] ?? [];
+        // Bind PRG / success URL to the page that actually hosts the
+        // form (resolved from the validated route table — never raw
+        // user input), so the visitor stays on /contact (or the camp
+        // landing) instead of being bounced to home.
+        $pageUrl    = Router::canonicalUrl($slug, $lang, $langRoutes, $this->basePath, $this->singleLang);
+        $successUrl = $pageUrl . '?sent=1#contact';
 
-        $lang = $resolved['lang'];
-        $ctxFactory = function () use ($lang, $bindKey): array {
+        $ctxFactory = function () use ($lang, $slug, $bindKey): array {
             $dict = I18n::load($lang, $this->basePath, $this->singleLang);
             return RenderContext::build(
                 dict:           $dict,
                 lang:           $lang,
-                slug:           'home',
+                slug:           $slug,
                 basePath:       $this->basePath,
-                meta:           $dict['meta']['home'] ?? ['title' => '', 'description' => ''],
-                pageTemplate:   'pages/home',
+                meta:           $dict['meta'][$slug] ?? ['title' => '', 'description' => ''],
+                pageTemplate:   'pages/' . $slug,
                 supportedLangs: $this->supportedLangs,
                 routes:         $this->routes,
                 singleLang:     $this->singleLang,

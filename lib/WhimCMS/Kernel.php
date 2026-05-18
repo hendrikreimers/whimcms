@@ -286,7 +286,14 @@ final class Kernel
         }
 
         $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-        if ($method === 'POST' && $resolved['slug'] === 'home') {
+        // Pages whose POST is routed to the contact pipeline. Config-
+        // driven so the contact/booking form can live on a dedicated
+        // page (or several) instead of only home. Default ['home']
+        // preserves the historical behaviour exactly. Every pipeline
+        // gate (CSRF / captcha / honeypot / rate-limit / contact.enabled)
+        // is unchanged and still applies per request.
+        $contactPostSlugs = (array)Config::get('contact.post_slugs', ['home']);
+        if ($method === 'POST' && in_array($resolved['slug'], $contactPostSlugs, true)) {
             $contactPostHandler = new ContactPostHandler(
                 engine:         $this->engine,
                 pageRenderer:   $pageRenderer,
