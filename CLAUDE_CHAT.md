@@ -562,3 +562,46 @@ A complete bundle response from you should:
 
 When in doubt, ask. The operator prefers a clarifying question
 over a wrong assumption.
+
+## Validated workflow: design template → WhimCMS theme
+
+A prior attempt failed by drifting/inventing; this is what made a
+later attempt succeed. Apply it for any template→theme conversion.
+(Mirrors the engine rules in the repo's `CLAUDE.md` — kept in sync.)
+
+- **The pasted design template is the schema-of-record. Port, never
+  invent.** Its own README / `elements.html` hold the conventions —
+  follow them; don't re-derive a new spacing/structure system. The
+  bundled example theme is engine-mechanics reference only, never a
+  design rulebook.
+- **propose → wait for the literal word `FREIGABE` → deliver →
+  list every file created/modified → operator verifies.** Never
+  infer approval from "ok"/"go"/enthusiasm. No scope creep.
+- **CSS/fonts verbatim.** A deliberate, operator-approved deviation
+  is appended at file end with a comment `sanctioned addition/cleanup
+  (FREIGABE <date>)`. Never change a bare global selector (e.g.
+  `a {}`) — scope to a content wrapper (`.copy a`). "Verbatim" guards
+  against unauthorised drift, not against changes the operator asks
+  for.
+- **Block contract:** `partials/blocks/<type>.html` `{@ block @}`
+  annotation ↔ `whimadmin/config/blocks/<type>.json` sidecar. Every
+  sidecar field and every `.md` attribute used MUST be in the
+  annotation, or it loud-fails (admin boot / page 500). Editor
+  fields = constrained `select`s of the design's real tokens, never
+  raw-class free-text; no `ph*` placeholder fields (empty image ⇒
+  `.ph` fallback in the partial).
+- **AttributeParser is strict** (already listed above): 2-space
+  indent; attrs ∈ annotation; lists all-scalar OR all-map (a `: `
+  inside a scalar list item silently makes it a map → mixed-list
+  parse error / page 500); lone `:::` closes the block; image paths
+  bare `/assets/…` (no `~`/`^`).
+- **You cannot run tools here.** So: reason strictly from the pasted
+  files, and hand the operator the EXACT checks to run — (a) a
+  read-only block↔sidecar/`.md`-attr audit, (b) a live curl/HTTP
+  sweep of every changed URL (status + loud-fail). Tell them an
+  offline pass is not enough — only the live render catches deeper
+  AttributeParser failures. For no-change refactors, instruct a
+  before/after rendered-HTML diff (require zero drift).
+- Build every page in all languages together (never an asymmetric
+  language state); one reference page fully correct and
+  operator-verified before scaling out; answers German, concise.

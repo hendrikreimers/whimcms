@@ -593,3 +593,57 @@ After an edit batch, give a short report: what was created /
 modified / deleted, with paths. The user reviews and gives the next
 direction.
 
+## Converting a design template into a WhimCMS theme (validated workflow)
+
+This is the special case where a finished design template (e.g.
+`_your_template/`) is ported into a WhimCMS theme. A
+prior attempt failed by drifting/inventing; the workflow below is
+what made a later attempt succeed end-to-end. Follow it for any
+future template→theme conversion. (Keep `CLAUDE_CHAT.md` in sync —
+it mirrors engine rules for web-chat.)
+
+- **Source = schema-of-record, read-only.** Port, never invent.
+  Conventions live in the template's own README/`elements.html`;
+  read them, don't re-derive. Markup/classes/CSS/JS behaviour are
+  dictated by the template, not by the bundled example theme (read
+  the example only to learn engine mechanics; verify against `lib/`).
+- **propose → literal `FREIGABE` → execute → path-listed report →
+  user verifies.** Never infer approval from "ok"/"go"/enthusiasm.
+  No scope creep / "while I'm here" extras.
+- **CSS/fonts verbatim.** Deliberate, user-approved deviations only,
+  appended at file end with a comment `sanctioned addition/cleanup
+  (FREIGABE <date>)`. Never a bare global selector change (e.g. bare
+  `a {}`) — scope to a content wrapper (`.copy a`) to avoid wrecking
+  component styling. The "verbatim" rule guards against *unauthorised*
+  drift, not against changes the user explicitly requests.
+- **Block contract:** a block = `partials/blocks/<type>.html` with a
+  `{@ block @}` annotation ↔ `whimadmin/config/blocks/<type>.json`
+  sidecar. Every sidecar top-level field AND every `.md` attribute
+  used must appear in the annotation, or it loud-fails (admin boot /
+  page 500). Editor-facing fields only: constrained `select`s of the
+  design's real tokens, never raw CSS-class free-text; no `ph*`
+  text-placeholder fields — empty image ⇒ template `.ph` fallback.
+- **AttributeParser is strict:** exactly 2-space indent; attrs ∈
+  annotation; lists all-scalar OR all-map (a `: ` inside a scalar
+  list item makes it a map → mixed-list parse error); a lone `:::`
+  closes the block; image paths bare `/assets/…` (no `~`/`^`
+  marker — those are for page links only).
+- **Verify with BOTH layers.** (1) offline: a read-only Node audit
+  (block↔sidecar sync; every `.md` block's attrs ∈ annotation; JSON
+  valid). (2) live: a curl/HTTP sweep of every affected URL (status
+  + loud-fail body). Offline catches attr/JSON drift; only the live
+  render catches deeper AttributeParser failures. For refactors that
+  must not change output: capture rendered HTML before/after and
+  diff the affected nodes — require zero drift.
+- **Agents:** delegate read-only inventory/bulk authoring to agents
+  (keeps context lean); do design-critical writes, security analysis,
+  and all verification yourself. Trust-but-verify every agent batch
+  via the validators above.
+- **overlayfs dev:** editing existing files is live immediately;
+  newly created / deleted files need a dev remount before the server
+  sees them — confirm freshness with a version marker before trusting
+  a live sweep.
+- German, concise answers; small diffs; one reference page fully
+  correct and user-verified before scaling out; build every page in
+  all languages together (never an asymmetric lang state).
+
