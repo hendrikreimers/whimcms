@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimAdmin\Auth;
 
+use H42\WhimCMS\Log as CoreLog;
+
 /**
  * Stateful, file-backed session for whimadmin.
  *
@@ -258,12 +260,12 @@ final class Session
         }
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
         if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            \H42\WhimCMS\Log::lastPhpError('Session tempfile write failed', ['tmp' => $tmp]);
+            CoreLog::lastPhpError('Session tempfile write failed', ['tmp' => $tmp]);
             throw new \RuntimeException('Cannot write session (tempfile).');
         }
         @chmod($tmp, 0o600);
         if (!@rename($tmp, $path)) {
-            \H42\WhimCMS\Log::lastPhpError('Session rename failed', ['tmp' => $tmp, 'target' => $path]);
+            CoreLog::lastPhpError('Session rename failed', ['tmp' => $tmp, 'target' => $path]);
             @unlink($tmp);
             throw new \RuntimeException('Cannot finalise session.');
         }

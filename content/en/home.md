@@ -4,6 +4,7 @@ hidden: true
 meta:
   title: WhimCMS — a minimal, security-first PHP CMS
   description: Server-rendered, file-based, no build step. One repository you can read in an afternoon and host anywhere PHP runs.
+llms: feature
 ---
 
 ::: hero

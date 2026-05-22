@@ -3,6 +3,7 @@ layout: default
 meta:
   title: Imprint — WhimCMS
   description: Operator information for this WhimCMS deployment.
+llms: exclude
 ---
 
 ::: sub-hero

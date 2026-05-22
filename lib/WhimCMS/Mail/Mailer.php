@@ -161,14 +161,14 @@ final class Mailer
             // quota) could silently disable the daily-mail cap and
             // turn the contact form into a flooding amplifier. The
             // failure is logged so the operator notices.
-            \H42\WhimCMS\Log::error('Mailer: cannot create counter dir; failing closed (no mail sent)', ['dir' => $dir]);
+            Log::error('Mailer: cannot create counter dir; failing closed (no mail sent)', ['dir' => $dir]);
             return false;
         }
         $path = $dir . '/' . date('Y-m-d') . '.txt';
 
         $fh = @fopen($path, 'c+');
         if ($fh === false) {
-            \H42\WhimCMS\Log::error('Mailer: cannot open counter file; failing closed (no mail sent)', ['path' => $path]);
+            Log::error('Mailer: cannot open counter file; failing closed (no mail sent)', ['path' => $path]);
             return false;
         }
         try {

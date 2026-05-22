@@ -172,6 +172,7 @@ final class PagesTreeController
                         'meta_description' => is_string($meta['description'] ?? null) ? $meta['description'] : '',
                         'disabled'         => is_string($fm['disabled'] ?? null) ? $fm['disabled']         : '',
                         'hidden'           => is_string($fm['hidden']   ?? null) ? $fm['hidden']           : '',
+                        'llms'             => is_string($fm['llms']     ?? null) ? $fm['llms']             : '',
                     ];
                 } catch (ContentNotFoundException) {
                     $out['hasMd'] = false;

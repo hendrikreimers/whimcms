@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimAdmin\Auth;
 
+use H42\WhimCMS\Log as CoreLog;
+
 /**
  * Single-user account store.
  *
@@ -275,12 +277,12 @@ final class UserStore
         }
         $tmp = $this->path . '.tmp.' . bin2hex(random_bytes(6));
         if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            \H42\WhimCMS\Log::lastPhpError('User-record tempfile write failed', ['tmp' => $tmp]);
+            CoreLog::lastPhpError('User-record tempfile write failed', ['tmp' => $tmp]);
             throw new \RuntimeException('Cannot write user record (tempfile).');
         }
         @chmod($tmp, 0o600);
         if (!@rename($tmp, $this->path)) {
-            \H42\WhimCMS\Log::lastPhpError('User-record rename failed', ['tmp' => $tmp, 'target' => $this->path]);
+            CoreLog::lastPhpError('User-record rename failed', ['tmp' => $tmp, 'target' => $this->path]);
             @unlink($tmp);
             throw new \RuntimeException('Cannot finalise user record.');
         }

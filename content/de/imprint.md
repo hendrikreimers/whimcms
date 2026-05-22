@@ -3,6 +3,7 @@ layout: default
 meta:
   title: Impressum — WhimCMS
   description: Betreiberinformationen für diese WhimCMS-Installation.
+llms: exclude
 ---
 
 ::: sub-hero

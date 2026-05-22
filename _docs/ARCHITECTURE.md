@@ -180,8 +180,8 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
     Cache/                shared abstract base for cache sweepers
       Sweeper.php           sentinel-gated, lock-protected, root-confined,
                             lstat-based symlink/type rejection
-    Seo/                  canonical / robots / sitemap / per-page SEO
-      Origin.php Robots.php Sitemap.php PageSeo.php
+    Seo/                  canonical / robots / sitemap / llms.txt / per-page SEO
+      Origin.php Robots.php Sitemap.php LlmsTxt.php PageSeo.php
 
 content/                  page content (block compositions, root-level)
   <lang>/
@@ -350,6 +350,9 @@ Walk through `lib/WhimCMS/Kernel.php`. Every request follows one of these paths.
                              `{% image %}` directive wrote earlier)
    - `robots.txt`          → `Seo\Robots::send()`
    - `sitemap.xml`         → `Seo\Sitemap::send()`
+   - `llms.txt` /          → `Seo\LlmsTxt::send()` (opt-in: served only
+     `<lang>/llms.txt`        when `seo.llms.enabled` AND `seo.indexable`;
+                             otherwise falls through to 404)
 4. Resolve URL via `Router::resolvePath()`. Result: `(lang, slug, …)`,
    or `null` for 404, or a redirect tag (root → `/<lang>/`, bare
    segment → `/<lang>/segment`, legacy `.html` → canonical pretty URL).

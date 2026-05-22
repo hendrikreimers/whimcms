@@ -55,30 +55,47 @@ final class PhpArrayWriter
 
         $body = $this->render($target, $payload);
 
-        // Sanity round-trip: the bytes we're about to write must
-        // re-`include` to the same array. Catches any serialiser bug
-        // before it lands on disk.
-        $tmpDir = sys_get_temp_dir();
-        $probe  = $tmpDir . DIRECTORY_SEPARATOR . 'whimadmin-cfg-probe-' . bin2hex(random_bytes(6)) . '.php';
-        if (@file_put_contents($probe, $body) === false) {
-            throw new \RuntimeException('Cannot write probe file for round-trip check.');
+        // Write the tempfile EXCLUSIVELY in the (deny-all, non-world-
+        // writable) core config dir — same filesystem as $path, so the
+        // later rename stays atomic. fopen('x') (O_EXCL) makes a pre-
+        // existing path / symlink fail rather than be followed; this is
+        // also the file we round-trip-check below, so no generated PHP
+        // is ever executed from a shared temp directory.
+        $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
+        $fh  = @fopen($tmp, 'x');
+        if ($fh === false) {
+            throw new \RuntimeException("Cannot create config tempfile: {$path}");
         }
+        $written = @fwrite($fh, $body);
+        @fflush($fh);
+        // Close before the require so we never hold a write handle open
+        // while PHP opens the same path for reading (Windows sharing).
+        @fclose($fh);
+        if ($written === false || $written !== strlen($body)) {
+            @unlink($tmp);
+            throw new \RuntimeException("Cannot write config tempfile: {$path}");
+        }
+        @chmod($tmp, 0o644);
+
+        // Sanity round-trip: the exact bytes we're about to commit must
+        // re-`require` to the same array. Catches any serialiser bug
+        // before it lands on disk. We require the tempfile that is about
+        // to be renamed into place — it lives in the contained config
+        // dir, never in a shared temp dir, so no foreign-writable path
+        // is ever executed. A ParseError/Throwable cleans up the temp.
         try {
             /** @var mixed $reloaded */
-            $reloaded = require $probe;
-        } finally {
-            @unlink($probe);
+            $reloaded = require $tmp;
+        } catch (\Throwable $e) {
+            @unlink($tmp);
+            throw new \RuntimeException('Config round-trip require failed: ' . $e->getMessage(), 0, $e);
         }
         if ($reloaded !== $payload) {
+            @unlink($tmp);
             throw new \RuntimeException('Config-array serialiser produced a non-round-tripping value.');
         }
 
         // Atomic rename in core config dir.
-        $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
-        if (@file_put_contents($tmp, $body, LOCK_EX) === false) {
-            throw new \RuntimeException("Cannot write config file (tempfile): {$path}");
-        }
-        @chmod($tmp, 0o644);
         if (!@rename($tmp, $path)) {
             @unlink($tmp);
             throw new \RuntimeException("Cannot finalise config file: {$path}");

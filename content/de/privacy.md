@@ -3,6 +3,7 @@ layout: default
 meta:
   title: Datenschutz — WhimCMS
   description: Was diese Seite speichert, was nicht, und wie du den Betreiber erreichst.
+llms: exclude
 ---
 
 ::: sub-hero

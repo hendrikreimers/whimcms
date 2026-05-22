@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS\Image;
 
+use H42\WhimCMS\Log;
+
 /**
  * Endpoint handler for `/img-c/<filename>` requests.
  *
@@ -106,7 +108,7 @@ final class CroppedServer
         if (@readfile($path) === false) {
             // Headers already on the wire; can't change status. Log so
             // the operator notices a degraded response.
-            \H42\WhimCMS\Log::error('CroppedServer: readfile failed', ['path' => $path]);
+            Log::error('CroppedServer: readfile failed', ['path' => $path]);
         }
     }
 

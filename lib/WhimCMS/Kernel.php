@@ -10,9 +10,13 @@ use H42\WhimCMS\Frontend\ContactPostHandler;
 use H42\WhimCMS\Frontend\LanguageDetector;
 use H42\WhimCMS\Frontend\PageRenderer;
 use H42\WhimCMS\Http\Responder;
+use H42\WhimCMS\Image\CroppedServer;
 use H42\WhimCMS\Path\PathResolver;
 use H42\WhimCMS\Security\Http\RequestSecurity;
 use H42\WhimCMS\Security\Secret;
+use H42\WhimCMS\Seo\LlmsTxt;
+use H42\WhimCMS\Seo\Robots;
+use H42\WhimCMS\Seo\Sitemap;
 use H42\WhimCMS\Template\Engine;
 
 /**
@@ -232,12 +236,26 @@ final class Kernel
 
         // SEO endpoints — language-agnostic, served at the deployment root.
         if ($path === 'robots.txt') {
-            \H42\WhimCMS\Seo\Robots::send($basePath);
+            Robots::send($basePath);
             return;
         }
         if ($path === 'sitemap.xml') {
-            \H42\WhimCMS\Seo\Sitemap::send($basePath, $this->pageLoader, $this->singleLang);
+            Sitemap::send($basePath, $this->pageLoader, $this->singleLang);
             return;
+        }
+        // llms.txt (llmstxt.org) — opt-in plain-text page index for LLM
+        // crawlers. Served only when seo.llms.enabled AND seo.indexable
+        // are both true; otherwise this falls through to normal routing
+        // (→ 404), so a non-indexable / disabled site never advertises
+        // its page list. Multi-lang: /<lang>/llms.txt; /llms.txt maps to
+        // the default language.
+        if ((bool)Config::get('seo.llms.enabled', false)
+            && (bool)Config::get('seo.indexable', false)) {
+            $llmsLang = $this->matchLlmsTxtLang($path);
+            if ($llmsLang !== null) {
+                LlmsTxt::send($basePath, $this->pageLoader, $this->singleLang, $llmsLang);
+                return;
+            }
         }
 
         $resolved = Router::resolvePath($path, $this->supportedLangs, $this->routes);
@@ -347,12 +365,41 @@ final class Kernel
     }
 
     /**
+     * Match the llms.txt endpoint and return the language to render it
+     * in, or null when $path is not an llms.txt request.
+     *
+     *   single-lang:  "llms.txt"        → the only supported language
+     *   multi-lang:   "llms.txt"        → default language
+     *                 "<lang>/llms.txt" → that language (must be supported)
+     *
+     * Pure path inspection — it does not consult the route table, so it
+     * can sit ahead of Router::resolvePath() without shadowing normal
+     * page resolution (no route maps a ".txt" segment).
+     */
+    private function matchLlmsTxtLang(string $path): ?string
+    {
+        if ($this->singleLang) {
+            return $path === 'llms.txt' ? ($this->supportedLangs[0] ?? null) : null;
+        }
+        if ($path === 'llms.txt') {
+            return (string)Config::get('default_lang', $this->supportedLangs[0] ?? 'en');
+        }
+        if (str_ends_with($path, '/llms.txt')) {
+            $lang = substr($path, 0, -strlen('/llms.txt'));
+            if ($lang !== '' && in_array($lang, $this->supportedLangs, true)) {
+                return $lang;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Hand off to the cropped-image endpoint. Read-only: serves files
      * the `{% image %}` directive wrote during a previous template
      * render. URL pattern: `/img-c/<basename>-<hash>.<ext>`.
      */
     private function serveCroppedImage(string $path): void
     {
-        \H42\WhimCMS\Image\CroppedServer::fromConfig($this->paths['var'])->handle($path);
+        CroppedServer::fromConfig($this->paths['var'])->handle($path);
     }
 }

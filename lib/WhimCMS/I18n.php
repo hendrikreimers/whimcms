@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS;
 
+use H42\WhimCMS\Content\Identifiers;
+
 /**
  * Loads JSON dictionaries for the active language and resolves the "~"
  * path-prefix marker against the deployment base path. No cookies, no
@@ -127,7 +129,7 @@ final class I18n
      */
     public static function load(string $lang, string $basePath = '', bool $singleLang = false): array
     {
-        \H42\WhimCMS\Content\Identifiers::assertLang($lang);
+        Identifiers::assertLang($lang);
         $cacheKey = $lang . '|' . $basePath . '|' . ($singleLang ? '1' : '0');
         if (isset(self::$loaded[$cacheKey])) {
             return self::$loaded[$cacheKey];

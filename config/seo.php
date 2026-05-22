@@ -25,6 +25,12 @@ declare(strict_types=1);
  *   person             block. Empty/missing fields are dropped from
  *                      the output. Leave `person` empty for non-
  *                      personal sites.
+ *
+ *   llms               When `llms.enabled` AND `indexable` are both
+ *                      true, /llms.txt (llmstxt.org) serves a plain-
+ *                      text page index for LLM crawlers. On a non-
+ *                      indexable site the endpoint 404s, so a staging
+ *                      deploy never advertises its page list.
  */
 
 return [
@@ -57,6 +63,21 @@ return [
         'og_image'         => '/assets/images/placeholder/core/hero.jpg',
         'twitter_handle'   => '',
         'sitemap_exclude'  => [],
+
+        /**
+         * llms.txt endpoint (llmstxt.org). Served at /llms.txt and
+         * /<lang>/llms.txt ONLY when `enabled` is true AND the global
+         * `indexable` flag above is true — a non-indexable site must
+         * not advertise its pages. Page selection mirrors the sitemap
+         * (skips hidden/disabled pages and `sitemap_exclude` slugs); a
+         * page can additionally opt out via `llms: exclude` in its
+         * front-matter, or steer placement with `llms: feature` /
+         * `llms: optional`.
+         */
+        'llms' => [
+            'enabled' => false,
+        ],
+
         'organization' => [
             'name'   => 'WhimCMS',
             'logo'   => '/theme/assets/whimcms-mark.svg',

@@ -85,6 +85,31 @@ final class Page
     }
 
     /**
+     * llms.txt placement directive from front-matter `llms: <value>`.
+     *
+     * Controls how the page appears in the generated /llms.txt index
+     * (see Seo\LlmsTxt):
+     *
+     *   'exclude'  — omit the page from llms.txt entirely (it stays in
+     *                sitemap.xml; this is the llms-only opt-out)
+     *   'feature'  — pin the page to the top of the main "## Pages" list
+     *   'optional' — move the page into the "## Optional" section
+     *   ''         — not set: the page is listed normally under "## Pages"
+     *
+     * The value is validated against this exact set at load time by
+     * PageLoader; anything else fails loud. Absence yields the empty
+     * string (automatic placement).
+     */
+    public function llms(): string
+    {
+        $v = $this->header['llms'] ?? null;
+        if (!is_string($v)) {
+            return '';
+        }
+        return strtolower(trim($v));
+    }
+
+    /**
      * Coerce the front-matter's string representation of a boolean
      * (`true` / `yes` / `1`) into a real bool. Anything else is
      * false — including the absence of the key entirely.

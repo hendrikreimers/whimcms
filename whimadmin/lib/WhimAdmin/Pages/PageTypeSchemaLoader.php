@@ -46,6 +46,7 @@ final class PageTypeSchemaLoader
         'layout',
         'hidden',
         'disabled',
+        'llms',
         'meta.title',
         'meta.description',
     ];

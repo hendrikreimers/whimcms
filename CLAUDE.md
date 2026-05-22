@@ -639,10 +639,6 @@ it mirrors engine rules for web-chat.)
   (keeps context lean); do design-critical writes, security analysis,
   and all verification yourself. Trust-but-verify every agent batch
   via the validators above.
-- **overlayfs dev:** editing existing files is live immediately;
-  newly created / deleted files need a dev remount before the server
-  sees them — confirm freshness with a version marker before trusting
-  a live sweep.
 - German, concise answers; small diffs; one reference page fully
   correct and user-verified before scaling out; build every page in
   all languages together (never an asymmetric lang state).

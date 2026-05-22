@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimAdmin\Auth;
 
+use H42\WhimCMS\Log as CoreLog;
+
 /**
  * One-shot setup-token store.
  *
@@ -81,7 +83,7 @@ final class SetupTokenStore
         // Better to surface the underlying error early.
         $lockFh = @fopen($this->lockPath, 'c');
         if ($lockFh === false) {
-            \H42\WhimCMS\Log::lastPhpError('SetupToken lock fopen failed', ['path' => $this->lockPath]);
+            CoreLog::lastPhpError('SetupToken lock fopen failed', ['path' => $this->lockPath]);
             throw new \RuntimeException(
                 'Cannot acquire setup-token lock. Check that whimadmin/var/state is writable by the PHP process.'
             );
@@ -95,7 +97,7 @@ final class SetupTokenStore
             // method was rewritten to close. Fail loud so the absence
             // of the lock isn't silently bypassed.
             if (!@flock($lockFh, LOCK_EX)) {
-                \H42\WhimCMS\Log::lastPhpError('SetupToken flock acquire failed', ['path' => $this->lockPath]);
+                CoreLog::lastPhpError('SetupToken flock acquire failed', ['path' => $this->lockPath]);
                 throw new \RuntimeException(
                     'Cannot lock setup-token state. Filesystem may not support advisory locking (NFS without lockd, etc.).'
                 );
@@ -263,12 +265,12 @@ final class SetupTokenStore
         $this->ensureDir();
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
         if (@file_put_contents($tmp, $content, LOCK_EX) === false) {
-            \H42\WhimCMS\Log::lastPhpError('SetupToken tempfile write failed', ['tmp' => $tmp]);
+            CoreLog::lastPhpError('SetupToken tempfile write failed', ['tmp' => $tmp]);
             throw new \RuntimeException("Cannot write file (tempfile): {$path}");
         }
         @chmod($tmp, 0o600);
         if (!@rename($tmp, $path)) {
-            \H42\WhimCMS\Log::lastPhpError('SetupToken rename failed', ['tmp' => $tmp, 'target' => $path]);
+            CoreLog::lastPhpError('SetupToken rename failed', ['tmp' => $tmp, 'target' => $path]);
             @unlink($tmp);
             throw new \RuntimeException("Cannot finalise file: {$path}");
         }

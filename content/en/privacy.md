@@ -3,6 +3,7 @@ layout: default
 meta:
   title: Privacy — WhimCMS
   description: What this site stores, what it does not, and how to reach the operator.
+llms: exclude
 ---
 
 ::: sub-hero

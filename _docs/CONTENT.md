@@ -83,6 +83,9 @@ opened and closed with `---` on lines of their own.
 | `layout` | optional | Whitelist in `config/content.php → content.allowed_layouts`. Defaults to `default`. Maps to `templates/layout.html` (or `layout-<other>.html`). The bundled showcase ships with `default, business, personal, trainer, dev`. |
 | `meta.title` | optional | Used as `<title>` and OG/Twitter title. Falls back to `i18n/<lang>.json → meta.<slug>.title`. |
 | `meta.description` | optional | Used as `<meta name="description">` and OG/Twitter description. Same fallback. |
+| `hidden` | optional | `true` keeps the page out of `sitemap.xml`, `/llms.txt`, and the navigation. The page still renders at its URL. |
+| `disabled` | optional | `true` returns 404 on the public site and removes the page from `sitemap.xml`, `/llms.txt`, and the language switcher. |
+| `llms` | optional | Placement in `/llms.txt` (served when `seo.llms.enabled` AND `seo.indexable`). One of `feature` (top of the main list), `optional` (secondary section), `exclude` (omit). Absent = listed normally. |
 
 Any other top-level key fails parsing — typos surface loud.
 

@@ -79,7 +79,7 @@ final class PageLoader
     // Slugs are author-controlled (defined in config/routes.php), not
     // visitor-controlled. The realpath-containment check below is the
     // second gate regardless.
-    private const HEADER_ALLOWED_KEYS = ['layout', 'meta', 'hidden', 'disabled'];
+    private const HEADER_ALLOWED_KEYS = ['layout', 'meta', 'hidden', 'disabled', 'llms'];
     private const META_ALLOWED_KEYS = ['title', 'description'];
 
     /**
@@ -89,6 +89,14 @@ final class PageLoader
      */
     private const BOOL_TRUE_FORMS  = ['true',  'yes', '1'];
     private const BOOL_FALSE_FORMS = ['false', 'no',  '0', ''];
+
+    /**
+     * Accepted values for the `llms` front-matter directive — controls a
+     * page's placement in the generated /llms.txt index. AttributeParser
+     * produces strings; the loader normalises (lowercase/trim) and
+     * rejects anything outside this set. See Seo\LlmsTxt and Page::llms().
+     */
+    private const LLMS_ALLOWED_VALUES = ['exclude', 'optional', 'feature'];
 
     /** Application secret used to HMAC-sign cache files. */
     private string $secret;
@@ -518,6 +526,18 @@ final class PageLoader
                 && !in_array($norm, self::BOOL_FALSE_FORMS, true)) {
                 throw new ParseException(
                     "Front-matter '{$boolKey}' must be true/false/yes/no/1/0.",
+                    1
+                );
+            }
+        }
+        if (isset($header['llms'])) {
+            $v = $header['llms'];
+            if (!is_string($v)) {
+                throw new ParseException("Front-matter 'llms' must be a string.", 1);
+            }
+            if (!in_array(strtolower(trim($v)), self::LLMS_ALLOWED_VALUES, true)) {
+                throw new ParseException(
+                    "Front-matter 'llms' must be one of: exclude, optional, feature.",
                     1
                 );
             }

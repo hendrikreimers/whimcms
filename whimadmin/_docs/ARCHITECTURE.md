@@ -198,7 +198,8 @@ whimadmin/
     pages-tree/              TYPO3-style page-tree editor (entry: main.js)
       api.js                 fetch wrapper, holds csrf + treeVersion
       render.js              clones view templates → DOM (no innerHTML)
-      editor.js              right-pane form (text/bool/select/layout/url-path)
+      editor.js              right-pane form (text/bool/select/layout/url-path;
+                             select options may be flat strings or {value,label})
       dnd.js                 HTML5 DnD: before/after/into, new-page source
       dialogs.js             native <dialog> prompts/selects/confirms
       util.js                cssEscape helper

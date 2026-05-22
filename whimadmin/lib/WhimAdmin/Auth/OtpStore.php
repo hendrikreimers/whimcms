@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimAdmin\Auth;
 
+use H42\WhimCMS\Log as CoreLog;
+
 /**
  * One-time password (mail-delivered) store.
  *
@@ -90,7 +92,7 @@ final class OtpStore
         $this->ensureDir();
         $lockFh = @fopen($lockPath, 'c');
         if ($lockFh === false) {
-            \H42\WhimCMS\Log::lastPhpError('OTP verify lock fopen failed', ['path' => $lockPath]);
+            CoreLog::lastPhpError('OTP verify lock fopen failed', ['path' => $lockPath]);
             return false; // fail closed
         }
         try {
@@ -103,7 +105,7 @@ final class OtpStore
             // brute-force-multiplier hole this method exists to close.
             // Fail closed so the absence of the lock is never silent.
             if (!@flock($lockFh, LOCK_EX)) {
-                \H42\WhimCMS\Log::lastPhpError('OTP verify flock acquire failed', ['path' => $lockPath]);
+                CoreLog::lastPhpError('OTP verify flock acquire failed', ['path' => $lockPath]);
                 return false;
             }
             @chmod($lockPath, 0o600);
@@ -217,12 +219,12 @@ final class OtpStore
         }
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
         if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            \H42\WhimCMS\Log::lastPhpError('OTP tempfile write failed', ['tmp' => $tmp]);
+            CoreLog::lastPhpError('OTP tempfile write failed', ['tmp' => $tmp]);
             throw new \RuntimeException('Cannot write OTP record (tempfile).');
         }
         @chmod($tmp, 0o600);
         if (!@rename($tmp, $path)) {
-            \H42\WhimCMS\Log::lastPhpError('OTP rename failed', ['tmp' => $tmp, 'target' => $path]);
+            CoreLog::lastPhpError('OTP rename failed', ['tmp' => $tmp, 'target' => $path]);
             @unlink($tmp);
             throw new \RuntimeException('Cannot finalise OTP record.');
         }

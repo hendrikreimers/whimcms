@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS\Security;
 
+use H42\WhimCMS\Log;
+
 /**
  * Long-lived per-installation HMAC secret. Stored in a single file under
  * var/state/, generated on first request if missing. The secret is used
@@ -93,12 +95,12 @@ final class Secret
         $bytes = random_bytes(self::BYTES);
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
         if (@file_put_contents($tmp, $bytes, LOCK_EX) === false) {
-            \H42\WhimCMS\Log::lastPhpError('Secret tempfile write failed', ['tmp' => $tmp]);
+            Log::lastPhpError('Secret tempfile write failed', ['tmp' => $tmp]);
             throw new \RuntimeException("Cannot create secret at {$path}");
         }
         @chmod($tmp, 0600);
         if (!@rename($tmp, $path)) {
-            \H42\WhimCMS\Log::lastPhpError('Secret rename failed', ['tmp' => $tmp, 'target' => $path]);
+            Log::lastPhpError('Secret rename failed', ['tmp' => $tmp, 'target' => $path]);
             @unlink($tmp);
             // If rename failed because the target now exists, that's
             // fine — the lock should have prevented it but a non-POSIX

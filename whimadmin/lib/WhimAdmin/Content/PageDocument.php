@@ -58,12 +58,19 @@ final class PageDocument
     // from the public renderer entirely. Both are scalar booleans in
     // the source, parsed as strings and normalised by the public-side
     // loader.
-    private const HEADER_ALLOWED_KEYS = ['layout', 'meta', 'hidden', 'disabled'];
+    private const HEADER_ALLOWED_KEYS = ['layout', 'meta', 'hidden', 'disabled', 'llms'];
     private const META_ALLOWED_KEYS   = ['title', 'description'];
 
     /** Accepted string forms for the boolean front-matter flags. */
     private const BOOL_TRUE_FORMS  = ['true', 'yes', '1'];
     private const BOOL_FALSE_FORMS = ['false', 'no', '0', ''];
+
+    /**
+     * Accepted values for the `llms` front-matter directive (llms.txt
+     * placement). Mirrored from the core's PageLoader::LLMS_ALLOWED_VALUES
+     * so a save here cannot produce a value the public-site loader rejects.
+     */
+    private const LLMS_ALLOWED_VALUES = ['exclude', 'optional', 'feature'];
 
     /**
      * @param array<string, mixed> $header  Front-matter tree.
@@ -501,6 +508,17 @@ final class PageDocument
                 && !in_array($lower, self::BOOL_FALSE_FORMS, true)) {
                 throw new ParseException(
                     "Front-matter '{$flag}' must be one of true/yes/1/false/no/0 (got '{$v}').", 1
+                );
+            }
+        }
+        if (array_key_exists('llms', $header)) {
+            $v = $header['llms'];
+            if (!is_string($v)) {
+                throw new ParseException("Front-matter 'llms' must be a string.", 1);
+            }
+            if (!in_array(strtolower(trim($v)), self::LLMS_ALLOWED_VALUES, true)) {
+                throw new ParseException(
+                    "Front-matter 'llms' must be one of: exclude, optional, feature (got '{$v}').", 1
                 );
             }
         }

@@ -148,8 +148,20 @@ final class PageMetaFormDecoder
 
             case 'select':
                 $opts = $field->get('options');
-                if (is_array($opts) && !in_array($raw, $opts, true)) {
-                    throw new \RuntimeException("Value '{$raw}' is not in the select option list.");
+                if (is_array($opts)) {
+                    // Options may be flat strings or {value, label} maps;
+                    // validate the posted value against the value set.
+                    $allowed = [];
+                    foreach ($opts as $opt) {
+                        if (is_string($opt)) {
+                            $allowed[] = $opt;
+                        } elseif (is_array($opt) && is_string($opt['value'] ?? null)) {
+                            $allowed[] = $opt['value'];
+                        }
+                    }
+                    if (!in_array($raw, $allowed, true)) {
+                        throw new \RuntimeException("Value '{$raw}' is not in the select option list.");
+                    }
                 }
                 return $raw;
 

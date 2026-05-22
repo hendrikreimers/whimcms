@@ -175,6 +175,8 @@ function collectInitialValues(node, pageType, ctx) {
         out[name] = fm.meta_title || '';
       } else if (key === 'meta.description') {
         out[name] = fm.meta_description || '';
+      } else if (key === 'llms') {
+        out[name] = fm.llms || '';
       } else {
         out[name] = '';
       }
@@ -214,8 +216,13 @@ function renderField(name, spec, initial, ctx) {
     const opts = type === 'layout' ? (ctx.layouts || []) : (spec.extra?.options || []);
     for (const opt of opts) {
       const o = document.createElement('option');
-      o.value = opt;
-      o.textContent = opt;
+      if (typeof opt === 'string') {
+        o.value = opt;
+        o.textContent = opt;
+      } else {
+        o.value = opt.value ?? '';
+        o.textContent = opt.label ?? opt.value ?? '';
+      }
       input.appendChild(o);
     }
     input.value = initial || '';

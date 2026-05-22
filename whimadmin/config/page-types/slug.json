@@ -10,7 +10,14 @@
     "metaTitle":      { "type": "text",      "target": "frontmatter:meta.title",                         "label": "Meta title (HTML <title>)" },
     "metaDesc":       { "type": "textarea",  "target": "frontmatter:meta.description",                   "label": "Meta description" },
     "hiddenSitemap":  { "type": "bool",      "target": "frontmatter:hidden",                             "label": "Hidden in sitemap" },
-    "disabled":       { "type": "bool",      "target": "frontmatter:disabled",                           "label": "Disabled (404 on public site)" }
+    "disabled":       { "type": "bool",      "target": "frontmatter:disabled",                           "label": "Disabled (404 on public site)" },
+    "llms":           { "type": "select",    "target": "frontmatter:llms",                               "label": "LLM index (llms.txt) placement",
+                        "options": [
+                          { "value": "",         "label": "Default — listed normally" },
+                          { "value": "feature",  "label": "Feature — top of the main list" },
+                          { "value": "optional", "label": "Optional — secondary section" },
+                          { "value": "exclude",  "label": "Exclude from llms.txt" }
+                        ] }
   }
 }
 
