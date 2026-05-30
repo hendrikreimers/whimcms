@@ -25,9 +25,37 @@ namespace H42\WhimCMS\Security\Form\Captcha;
  */
 final class Captcha
 {
+    /**
+     * Difficulty floor for an *issued* challenge. A challenge below this
+     * is effectively free to solve (difficulty 0 means *any* nonce
+     * passes), which would silently neutralise the captcha while the
+     * form still advertises itself as protected — e.g. a hostile
+     * third-party config bundle shipping `difficulty: 0, enabled: true`.
+     * Clamping at issue time guarantees that whenever a token is enforced
+     * (see the `enabled` gate in the controller) it carries real work.
+     * 8 bits ≈ 256 expected attempts: imperceptible to a real solver, but
+     * a non-JS scraper can no longer pass with a single random nonce.
+     */
+    public const MIN_DIFFICULTY = 8;
+
+    /**
+     * Upper bound accepted at validation time. Well above the realistic
+     * configured ceiling (~20, where legit users already wait tens of
+     * seconds) and well below the 256-bit hash width, so the range check
+     * stays honest about the values it can actually see.
+     */
+    public const MAX_DIFFICULTY = 32;
+
     /** @return array{token: string, salt: string, difficulty: int} */
     public static function issue(string $secret, int $difficulty, ?int $now = null): array
     {
+        // Clamp into the meaningful range before signing. The floor
+        // closes the "enabled but difficulty 0" misconfiguration that
+        // would otherwise issue a toothless challenge; the cap mirrors
+        // the validation bound in nonceSatisfies(). The chosen difficulty
+        // is HMAC-bound into the token, so the value enforced at submit
+        // is exactly the clamped value issued here — never client-chosen.
+        $difficulty = max(self::MIN_DIFFICULTY, min(self::MAX_DIFFICULTY, $difficulty));
         $now = $now ?? time();
         // 16 bytes = 128 bits. Sufficient to make per-issuance salt collisions
         // statistically irrelevant (>2^64 issuances before any chance of
@@ -91,16 +119,16 @@ final class Captcha
     /**
      * True iff sha256(salt . nonce) has ≥ $difficulty leading zero bits.
      *
-     * The cap is 32 bits — well above the realistic configured ceiling
-     * (around 20, where legit users would already be waiting tens of
-     * seconds) and well below the theoretical 256-bit hash output where
-     * any value approaching that would have been rejected for max_age
-     * expiry long before it solved. Keeping the cap honest prevents the
-     * range-check from looking like it operates on values it never sees.
+     * The accepted range is [0, MAX_DIFFICULTY]. The upper cap keeps the
+     * range-check honest about the values it can actually see; the lower
+     * bound stays at 0 here (rather than MIN_DIFFICULTY) so this remains
+     * a pure mechanical predicate — the policy floor is applied once, at
+     * issue time, and baked into the signed token. A token can therefore
+     * never carry a sub-floor difficulty in the first place.
      */
     private static function nonceSatisfies(string $salt, string $nonce, int $difficulty): bool
     {
-        if ($difficulty < 0 || $difficulty > 32) {
+        if ($difficulty < 0 || $difficulty > self::MAX_DIFFICULTY) {
             return false;
         }
         $hash = hash('sha256', $salt . $nonce, true); // raw bytes

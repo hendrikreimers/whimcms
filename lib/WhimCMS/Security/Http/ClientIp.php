@@ -92,6 +92,57 @@ final class ClientIp
     }
 
     /**
+     * Determine whether the current request reached the visitor over
+     * HTTPS — the signal a caller uses to decide the `Secure` cookie
+     * flag. Reads `$_SERVER` directly so it works at the SAPI boundary
+     * before any Request object is built.
+     *
+     * Resolution mirrors resolve()'s trust model:
+     *   1. Direct TLS — `$_SERVER['HTTPS']` on, or `SERVER_PORT === 443`.
+     *   2. Behind a TLS-terminating reverse proxy (Cloudflare, ALB,
+     *      nginx, …) PHP often sees plain HTTP with no `HTTPS=on`. We
+     *      then honour `X-Forwarded-Proto`, but ONLY when `REMOTE_ADDR`
+     *      is itself in `trusted_proxies` — the exact same CIDR gate
+     *      that guards `X-Forwarded-For`. The original client→edge
+     *      protocol is the leftmost token of the (possibly comma-joined)
+     *      header value.
+     *
+     * An untrusted direct client cannot force a `true` verdict by sending
+     * its own `X-Forwarded-Proto: https` — the CIDR gate blocks it. And
+     * even if it could, the only effect is *adding* the `Secure` flag to
+     * its own cookie, which is fail-safe (the cookie simply won't ride a
+     * plain-HTTP request). A spoofed `http` likewise cannot strip a flag
+     * that direct-TLS detection already set in step 1.
+     */
+    public static function isHttps(): bool
+    {
+        $https = $_SERVER['HTTPS'] ?? '';
+        if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
+            return true;
+        }
+        if ((string)($_SERVER['SERVER_PORT'] ?? '') === '443') {
+            return true;
+        }
+
+        // Forwarded protocol is only believable from a trusted proxy hop.
+        $remote = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+        if (filter_var($remote, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+        $trusted = self::trustedProxies();
+        if ($trusted === [] || !self::ipInRanges($remote, $trusted)) {
+            return false;
+        }
+
+        $proto = (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '');
+        if ($proto === '') {
+            return false;
+        }
+        $first = trim(explode(',', $proto)[0]);
+        return strtolower($first) === 'https';
+    }
+
+    /**
      * Test if `$ip` falls within any of the given CIDR ranges.
      *
      * @param list<mixed> $ranges

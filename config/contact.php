@@ -51,7 +51,7 @@ return [
          * already-gated POST. Slugs come from the validated route table,
          * never from raw request input.
          */
-        'post_slugs' => ['contact'],
+        'post_slugs' => ['home'],
 
         /**
          * Per-field validation rules. Keys are HTML form input names.

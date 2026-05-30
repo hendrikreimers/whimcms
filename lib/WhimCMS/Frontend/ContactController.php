@@ -119,9 +119,17 @@ final class ContactController
             ];
         }
 
-        // 4. Honeypot — bots fill it, humans don't see it
+        // 4. Honeypot — bots fill it, humans don't see it.
+        // Coerce before the emptiness test. On the JSON body path the
+        // client controls the value's *type* (json_decode leaves can be
+        // arrays / numbers / bools), so a filled honeypot sent as a
+        // non-string — e.g. {"<field>": ["x"]} — must still trip. An
+        // `is_string` guard alone would let it slip past and dodge the
+        // strike. Arrays count as filled when non-empty; every scalar is
+        // stringified and trimmed.
         $honey = $post[$this->honeypotField] ?? '';
-        if (is_string($honey) && trim($honey) !== '') {
+        $honeyFilled = is_array($honey) ? $honey !== [] : trim((string)$honey) !== '';
+        if ($honeyFilled) {
             $this->blocklist->strike($clientIp);
             Log::info('Contact: honeypot tripped', []);
             // Lie to the bot — return "success" to drain its retry budget

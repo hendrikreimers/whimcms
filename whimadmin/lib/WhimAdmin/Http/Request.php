@@ -140,23 +140,17 @@ final class Request
     }
 
     /**
-     * Heuristic HTTPS detection. Reads PHP's `$_SERVER['HTTPS']` and
-     * falls back to a port-443 check. Behind a TLS-terminating reverse
-     * proxy that doesn't set `HTTPS=on` (Cloudflare, AWS ALB, …), this
-     * returns false — the operator should configure php-fpm or a
-     * fastcgi rule to populate `HTTPS=on` from the proxy header, or
-     * accept that the `Secure` cookie flag will be omitted (cookies
-     * still travel inside the proxy's TLS to the visitor; only the
-     * proxy↔origin hop is plain HTTP).
+     * Whether the request reached the visitor over HTTPS — drives the
+     * `Secure` cookie flag (see CookieJar). Delegates to the shared core
+     * resolver, which checks direct TLS (`$_SERVER['HTTPS']` / port 443)
+     * and, behind a configured trusted proxy, honours `X-Forwarded-Proto`
+     * under the same CIDR gate that guards `X-Forwarded-For`. An untrusted
+     * client cannot spoof a `true` verdict; without `trusted_proxies` the
+     * behaviour is identical to the previous direct-only detection.
      */
     public function isHttps(): bool
     {
-        $https = $_SERVER['HTTPS'] ?? '';
-        if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
-            return true;
-        }
-        $port = (string)($_SERVER['SERVER_PORT'] ?? '');
-        return $port === '443';
+        return ClientIp::isHttps();
     }
 
     /**
