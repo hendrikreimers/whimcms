@@ -47,7 +47,13 @@ final class Router
     public static function stripBase(string $rawUri, string $basePath): string
     {
         $rawUri = self::stripUnsafe($rawUri);
-        $path = parse_url($rawUri, PHP_URL_PATH) ?? '';
+        // parse_url() returns string|false|null; `??` only catches null, so a
+        // malformed URI (e.g. "//a:b" — passes RequestSecurity, no NUL/CR/LF)
+        // would leave a `false` that trips str_starts_with()/trim() under
+        // strict_types (TypeError → 500 instead of a clean 404). Coerce any
+        // non-string result to '' explicitly.
+        $parsed = parse_url($rawUri, PHP_URL_PATH);
+        $path   = is_string($parsed) ? $parsed : '';
         if ($basePath !== '' && str_starts_with($path, $basePath)) {
             $path = substr($path, strlen($basePath));
         }

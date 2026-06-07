@@ -469,6 +469,12 @@ final class TreeMutator
         $overlay = $this->overlayWriter->read($lang);
         $rootKey = $this->treeRoot;
         $overlay[$rootKey] ??= [];
+        if (!is_array($overlay[$rootKey])) {
+            throw new TreeInternalException(
+                'The page tree appears corrupted — please reload and retry.',
+                "overlay '{$rootKey}' is not an object",
+            );
+        }
         $overlay[$rootKey][$toSection] ??= [];
         if (!is_array($overlay[$rootKey][$toSection])) {
             throw new TreeInternalException(
