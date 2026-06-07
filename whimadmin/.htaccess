@@ -22,10 +22,20 @@ Options -Indexes -MultiViews
 # ErrorDocument override replace them with a generic page that
 # might leak information or hide the actual response.
 ErrorDocument 400 default
+ErrorDocument 401 default
 ErrorDocument 403 default
 ErrorDocument 404 default
 ErrorDocument 413 default
 ErrorDocument 500 default
+
+# ----- RECOMMENDED: Basic Auth — protect the entire admin area -----
+# Runs in the auth phase, before the mod_rewrite fixup, so every
+# request (clean URLs rewritten to index.php and direct static
+# files alike) is challenged. Keep .htpasswd OUTSIDE the web root.
+#AuthType Basic
+#AuthName "Restricted"
+#AuthUserFile /home/youruser/.htpasswd
+#Require valid-user
 
 # ----- Block PHP-only / state directories -----
 # Catches direct URL access to lib/, var/, views/, config/,

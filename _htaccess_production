@@ -94,6 +94,19 @@ RewriteRule (^|/)_ index.php [L]
 RewriteRule (^|/)\. index.php [L]
 RewriteRule \.(env|key|sample|bak|inc\.php|class\.php|md|tmpl\.html|log)$ index.php [L]
 
+# Block all direct requests to *.php (including /index.php), with or
+# without a query string or path-info. Only clean URLs (/, /contact, …)
+# reach the front controller — those are rewritten to index.php
+# internally, and THE_REQUEST keeps the *original* request line through
+# internal rewrites, so it still contains no ".php" and is not matched
+# here. A directly requested .php URL, by contrast, has ".php" in
+# THE_REQUEST and is rejected with 403. /whimadmin/ is exempt (real PHP
+# scripts run there directly, protected by Basic Auth). [F] is terminal,
+# so there is no rewrite loop.
+RewriteCond %{THE_REQUEST} \.php[\s/?]  [NC]
+RewriteCond %{REQUEST_URI} !^/whimadmin/  [NC]
+RewriteRule ^ - [F]
+
 # Real static files (CSS, JS, SVG, fonts, …) served directly.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
