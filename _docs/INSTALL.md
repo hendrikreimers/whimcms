@@ -59,6 +59,7 @@ Five-minute deployment from a fresh server.
    | `seo.canonical_hosts` | `config/seo.php` | Allowlist of hostnames; first entry is canonical. **Required** unless `seo.canonical_origin` is set — `Seo\Origin::resolve()` throws at boot when both are empty (the request `Host:` header is never used as a fallback, so Host-header poisoning of canonical / OG / sitemap URLs is structurally impossible). For local dev, set `['localhost']`. |
    | `seo.canonical_origin` | `config/seo.php` | **Recommended for production.** Hard-set to the absolute HTTPS origin (e.g. `https://example.com`) for the strongest posture — overrides any `$_SERVER['HTTPS']` detection and is poisoning-immune behind a TLS-terminating proxy. If you set this, `canonical_hosts` becomes optional. |
    | `seo.indexable` | `config/seo.php` | `false` until launch (emits noindex + disallow-all robots.txt) |
+   | `robots.categories` | `config/robots.php` | Optional. Curated 2026 bot-block list (AI-training / archives / SEO / AI-search), emitted only when `seo.indexable`. Tune the lists, or set `robots_override` / `robots_extend` (both default `null`) to let a `content/` file shape `robots.txt`. |
    | `supported_langs` | `config/i18n.php` | Trim if you don't want every shipped language |
    | `debug` | `config/app.php` | Stays `false` in production (the committed default). Stack traces include filesystem paths; the diagnostic `X-H42-Error` and `X-H42-Cache` response headers are also gated on this flag. Flip to `true` for local diagnostic sessions only. |
    | `csrf.bind_strategy` | `config/security.php` | `'ip_ua'` (default) catches token replay across both networks and browsers. Switch to `'ua'` if mobile-IP-roaming false-positives become visible in real visitor traffic — UA-only binding tolerates IP changes. |
@@ -120,6 +121,7 @@ classes:
 | `config/contact.php` | theme-bound | Form has additional / different fields |
 | `config/email_protection.php` | theme-bound | i18n key paths to obfuscated addresses depend on theme's i18n shape |
 | `config/seo.php` | deployment-bound | Identity (operator, organization, canonical hosts) — theme can ship sensible defaults |
+| `config/robots.php` | deployment-bound | Which crawlers to block, and whether a `content/` file may override / extend `robots.txt` — operator preference |
 | `config/mail.php` | deployment-bound | Recipient + sender domain — operator-set |
 | `config/security.php` | deployment-bound | CSRF / captcha / rate-limit tuning |
 | `config/images.php` | mostly site-bound | Should include `theme/assets` in `allowed_roots` if active theme bundles raster |

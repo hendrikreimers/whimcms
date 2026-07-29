@@ -34,6 +34,7 @@ final class Config
         'routes',
         'content',
         'seo',
+        'robots',
         'images',
         'mail',
         'email_protection',

@@ -48,6 +48,9 @@ config/                   runtime config split per concern; loaded in
   content.php             max_bytes, allowed_layouts, sweep interval
   seo.php                 canonical_origin/hosts, indexable, OG defaults,
                           JSON-LD person/organization
+  robots.php              dynamic robots.txt: bot-block categories, the
+                          per-category emit mode, and content override/
+                          extend file names
   images.php              widths whitelist, source caps, JPEG quality
   mail.php                recipient, from, daily cap, audit log knobs
   email_protection.php    obfuscation format + per-locale address paths
@@ -348,7 +351,13 @@ Walk through `lib/WhimCMS/Kernel.php`. Every request follows one of these paths.
    - `img-c/<filename>`    → `Image\CroppedServer::handle()`
                              (read-only; serves files the
                              `{% image %}` directive wrote earlier)
-   - `robots.txt`          → `Seo\Robots::send()`
+   - `robots.txt`          → `Seo\Robots::send()` (when `seo.indexable`:
+                             `Allow: /` plus each `config/robots.php`
+                             category block whose `mode` matches the SEO/
+                             llms state, then an optional content extend
+                             file, then the sitemap — or a content
+                             override file replacing the whole body; when
+                             not indexable: unconditional `Disallow: /`)
    - `sitemap.xml`         → `Seo\Sitemap::send()`
    - `llms.txt` /          → `Seo\LlmsTxt::send()` (opt-in: served only
      `<lang>/llms.txt`        when `seo.llms.enabled` AND `seo.indexable`;

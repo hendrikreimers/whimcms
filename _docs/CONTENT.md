@@ -8,6 +8,8 @@ what goes where.
 ```
 content/<lang>/<slug>.md         per-page composition + prose    ← edit per page
 content/_i18n_overlay.<lang>.json  editor i18n overrides          ← edit per locale (optional)
+content/_robots_override.txt     full robots.txt replacement     ← dev-gated (optional)
+content/_robots_extend.txt       robots.txt append               ← dev-gated (optional)
 i18n/<lang>.json                  theme microcopy (chrome)        ← edit per locale
 templates/                        visual rendering                ← engineering only
 ```
@@ -16,6 +18,7 @@ templates/                        visual rendering                ← engineerin
 |---|---|---|
 | `content/<lang>/<slug>.md` | Page composition (which blocks, in what order), the prose inside them, plus per-page meta (title, description) in the front-matter | Authors / editors |
 | `content/_i18n_overlay.<lang>.json` | Editor-controlled site-wide overrides on top of theme i18n: nav structure, footer copy (subject to an allowlist in `config/i18n.php`) | Authors / editors |
+| `content/_robots_override.txt` / `_robots_extend.txt` | Raw text that replaces (or is appended to) the generated `robots.txt`. Inert unless the site dev names the file in `config/robots.php`; both default to `null` = off. See [§ robots.txt overrides](#robotstxt-overrides) | Site dev opts in; editor fills in |
 | `i18n/<lang>.json` | Theme-shipped chrome: form labels, error messages, ARIA strings, page-meta fallbacks | Engineers / theme authors |
 | `templates/` | HTML structure of each block, layout, partials | Engineers |
 
@@ -304,6 +307,34 @@ edits — just the route + the content file.
 
 That's the whole flow. No template file under `templates/pages/` is
 needed; the layout renders blocks straight from the `.md`.
+
+## robots.txt overrides
+
+The dynamic `/robots.txt` (see `config/robots.php`) can be shaped by two
+optional plain-text files under `content/`. Both are **dev-gated**: they
+do nothing unless the site dev sets their file name in `config/robots.php`
+(`robots_override` / `robots_extend`), and both config keys default to
+`null` = off, so on a fresh install an editor cannot affect `robots.txt`
+at all.
+
+| File (default name) | Effect | When |
+|---|---|---|
+| `content/_robots_override.txt` | Its verbatim body **replaces** the entire generated `robots.txt`, including the `Sitemap:` line. | Full manual control. Ignored while empty / whitespace-only (falls back to the generated body). |
+| `content/_robots_extend.txt` | Its verbatim body is **appended** after the category blocks, before the `Sitemap:` line. | Additive — extra `Disallow:` groups, comments, etc. |
+
+Both are read only when `seo.indexable` is `true`. On a non-indexable
+(pre-launch / staging) site `robots.txt` is always an unconditional
+`Disallow: /` and neither file is consulted — `config/` wins, and a
+content file can never re-open a staging site.
+
+Safety: each file is read only from the validated `content/` directory
+(bare-filename only — a path separator, leading dot or null byte is
+rejected outright, never flattened — plus `realpath` containment as a
+second gate), capped at 16 KB, with `CR`/`LF` normalised and other control
+characters stripped. Because `robots.txt` is line-oriented plain text, an
+`extend` file can legitimately add `Disallow:` rules — an editor who
+writes `Disallow: /` there can de-index the site, so treat these files as
+a deliberate, dev-granted capability, not casual editor copy.
 
 ## Editor overlay file
 

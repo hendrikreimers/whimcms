@@ -188,6 +188,28 @@ the request `Host:` header is never used as a fallback, so a
 forgotten config wipe cannot silently re-enable Host-header
 poisoning. Local-dev installs set `'canonical_hosts' => ['localhost']`.
 
+The dynamic `/robots.txt` (`Seo\Robots`) draws its bot-block
+categories and — optionally — an editor-supplied override/extend
+file from `content/`. Two invariants keep that safe:
+
+- **Staging stays closed.** When `seo.indexable` is `false`,
+  `robots.txt` is an unconditional `Disallow: /`; the category list,
+  the override, and the extend file are all skipped *before* any file
+  is read. `config/` wins — no content file or category setting can
+  re-open a pre-launch site.
+- **Content overrides are contained + inert by default.** The
+  override/extend file names come from `config/robots.php` (dev-
+  controlled) and default to `null` (off). When enabled, the file is
+  read only from the validated `content/` dir (bare-filename only — any
+  path separator, leading dot, or null byte is rejected outright, not
+  flattened — plus `realpath` + `str_starts_with` containment as a second
+  gate), capped at 16 KB, with control characters stripped.
+  Every config-supplied token (crawler name, label) is collapsed to a
+  single line, so neither a config value nor a file body can inject an
+  extra `robots.txt` directive. Origin resolution happens *before* the
+  body is echoed, so an unconfigured origin fails as a clean 500 rather
+  than a truncated response.
+
 ### Reverse proxy / CDN adaptation
 
 Several defences key off the **client IP**:

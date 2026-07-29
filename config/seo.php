@@ -73,6 +73,13 @@ return [
          * page can additionally opt out via `llms: exclude` in its
          * front-matter, or steer placement with `llms: feature` /
          * `llms: optional`.
+         *
+         * NOTE: config/robots.php's `ai_search` block is coupled to this
+         * flag. While `enabled` is false it emits `Disallow: /` (full AI
+         * exclusion); once `enabled` is true it flips to `Allow: /` —
+         * publishing an llms.txt signals you WANT AI retrieval. The block
+         * is always present when indexable; only its direction changes.
+         * See the `robots` section (config/robots.php) for the coupling.
          */
         'llms' => [
             'enabled' => false,

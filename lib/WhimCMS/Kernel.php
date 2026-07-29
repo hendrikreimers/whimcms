@@ -236,7 +236,7 @@ final class Kernel
 
         // SEO endpoints — language-agnostic, served at the deployment root.
         if ($path === 'robots.txt') {
-            Robots::send($basePath);
+            Robots::send($basePath, $this->paths['content']);
             return;
         }
         if ($path === 'sitemap.xml') {

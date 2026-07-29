@@ -22,3 +22,5 @@ Thumbs.db
 *.swo
 .idea
 .claude
+.claude-context
+.claude*
