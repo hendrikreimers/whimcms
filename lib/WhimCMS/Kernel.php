@@ -359,7 +359,7 @@ final class Kernel
                 $basePath,
                 false
             ),
-            301
+            302
         );
         return true;
     }
