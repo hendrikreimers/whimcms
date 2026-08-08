@@ -18,8 +18,18 @@ return [
     'csrf' => [
         /** Form must be submitted at least this many seconds after render (anti-bot). */
         'min_age_seconds' => 3,
-        /** Form is rejected after this many seconds (anti-replay). */
-        'max_age_seconds' => 3600,
+        /**
+         * Form is rejected after this many seconds (anti-replay).
+         *
+         * 2 hours rather than 1: visitors who leave the contact page
+         * open in a tab (read the privacy page, get interrupted, come
+         * back) were landing on "session expired" and losing their
+         * typed message. The token is still HMAC-signed and client-
+         * bound, so a longer window widens the replay surface only for
+         * an attacker who already holds a token issued to that exact
+         * client.
+         */
+        'max_age_seconds' => 7200,
 
         /**
          * How tightly the CSRF / form-timing token is bound to the client.
@@ -61,11 +71,19 @@ return [
      *                 18 → ~130k        (~2–4 s)
      *                 20 → ~520k        (~10–20 s)   too slow for legit users
      *   max_age     Seconds the issued challenge stays valid (anti-replay).
+     *               Keep this ALIGNED WITH csrf.max_age_seconds. A
+     *               shorter captcha window creates a band of page ages
+     *               in which the CSRF token still validates but the
+     *               challenge no longer does — the visitor then gets
+     *               "verification failed" plus a blocklist strike for
+     *               nothing but reading slowly. The proof-of-work cost
+     *               is unchanged by this value; a bot simply fetches a
+     *               fresh challenge, so a tight window buys no defence.
      */
     'captcha' => [
         'enabled'    => true,
         'difficulty' => 16,
-        'max_age'    => 600,
+        'max_age'    => 7200,
 
         /**
          * Throttle for "captcha missing" submissions.
@@ -74,12 +92,13 @@ return [
          * (browser without SubtleCrypto, e.g. on http://) — no strike,
          * the user sees a clear error message. Without throttling, a
          * bot can simply omit the captcha to skip the PoW step and
-         * still hit the rate limit (5/window) before being slowed.
+         * still hit the rate limit (see rate_limit.max_per_window)
+         * before being slowed.
          *
          * This counter records every miss in a sliding window per IP.
          * Once `miss_threshold` misses accumulate within `miss_window`
          * seconds, the next miss escalates to a regular Blocklist
-         * strike (which feeds the 3-strike soft block).
+         * strike (which feeds the soft block below).
          *
          * Defaults are sized so a single legitimate user retrying on
          * a flaky browser (3 attempts) is fine, while a bot grinding
@@ -93,19 +112,40 @@ return [
     // RATE LIMITING (per IP, sliding window)
     // =================================================================
 
+    /**
+     * The counter is incremented per *attempt* that gets past the CSRF
+     * gate — not per delivered mail. A validation error, an expired
+     * captcha or a mistyped address each consume a slot, so the ceiling
+     * has to leave room for a human correcting themselves a few times.
+     *
+     * It is also keyed on the client IP alone. Behind carrier-grade NAT
+     * (common with mobile and cable ISPs) many unrelated visitors
+     * share one public IPv4 and therefore one bucket — a low ceiling
+     * locks out strangers, not abusers.
+     *
+     * Abuse defence does not rest on this number: CSRF + proof-of-work
+     * + honeypot gate every submission ahead of it, and mail.daily_max
+     * (config/mail.php) caps actual delivery.
+     */
     'rate_limit' => [
         'window_seconds' => 600,    // 10 minutes
-        'max_per_window' => 5,      // 5 submissions per IP per window
+        'max_per_window' => 20,     // 20 submit attempts per IP per window
     ],
 
     // =================================================================
     // SOFT BLOCKLIST (after repeated invalid submissions)
     // =================================================================
 
+    /**
+     * Same IP-sharing caveat as rate_limit above: a block hits everyone
+     * behind the same NAT, not one person. Threshold and duration are
+     * sized so that a visitor who clicks "send" a few times after a
+     * failed submission does not lock out an entire carrier range.
+     */
     'blocklist' => [
-        'fail_threshold'  => 3,     // strikes before block
+        'fail_threshold'  => 6,     // strikes before block
         'fail_window'     => 1800,  // 30 minutes for strikes to add up
-        'block_duration'  => 1800,  // 30 minutes block on threshold hit
+        'block_duration'  => 900,   // 15 minutes block on threshold hit
     ],
 
     // =================================================================

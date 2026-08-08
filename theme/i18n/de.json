@@ -65,8 +65,10 @@
           "rate_limit":  "Zu viele Anfragen in kurzer Zeit. Bitte einen Moment warten.",
           "blocked":     "Übermittlung blockiert.",
           "mail_failed": "Wir konnten deine Nachricht nicht senden. Bitte später erneut versuchen oder direkt schreiben.",
-          "captcha":     "Captcha-Prüfung fehlgeschlagen. Bitte lade die Seite neu und versuche es erneut."
+          "captcha":     "Captcha-Prüfung fehlgeschlagen. Bitte lade die Seite neu und versuche es erneut.",
+          "captcha_unsupported": "Dein Browser kann die Sicherheitsprüfung nicht durchführen. Bitte aktualisiere ihn oder öffne die Seite über HTTPS."
         },
+        "checking": "Sicherheitsprüfung läuft …",
         "consentBefore": "Ich habe die ",
         "consentLink":   "Datenschutzerklärung",
         "consentAfter":  " gelesen und akzeptiert."

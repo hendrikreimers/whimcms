@@ -91,6 +91,57 @@ export function awaitCaptcha(form) {
 }
 
 /**
+ * Solve a REPLACEMENT challenge for a form that is already on screen.
+ *
+ * Every challenge is single-use: the server burns the (token, nonce)
+ * pair as soon as a submission carries it — even when that submission
+ * then fails field validation, because CaptchaStore::consume() runs
+ * before the validator (so one solved proof-of-work cannot be reused to
+ * probe the validator repeatedly). A form that stays on the page after
+ * a failed submit therefore holds a spent nonce, and the next click is
+ * a replay. contact-form.js fetches a fresh challenge and hands it here
+ * to be solved in place.
+ *
+ * Unlike initCaptcha() this ignores the bind-once guard — it is meant
+ * to run repeatedly over the life of a single page.
+ *
+ * @param {HTMLFormElement} form
+ * @param {string} salt        fresh salt from the re-fetched page
+ * @param {number} difficulty  fresh difficulty from the re-fetched page
+ * @returns {Promise<boolean>} true when a nonce was written
+ */
+export function refreshCaptcha(form, salt, difficulty) {
+  const nonceInput = form.querySelector('[data-captcha-nonce]');
+  if (!(nonceInput instanceof HTMLInputElement)) {
+    return Promise.resolve(false);
+  }
+  // Drop the spent nonce first: if anything below fails, an empty field
+  // is the honest state — the server treats it as "solver never ran"
+  // (no strike) rather than as a replay (strike).
+  nonceInput.value = '';
+
+  if (!salt || !Number.isFinite(difficulty) || difficulty <= 0) {
+    return Promise.resolve(false);
+  }
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    form.dataset.captchaUnsupported = '1';
+    return Promise.resolve(false);
+  }
+
+  form.dataset.captchaSalt = salt;
+  form.dataset.captchaDifficulty = String(difficulty);
+
+  const promise = solve(salt, difficulty)
+    .then((nonce) => {
+      nonceInput.value = nonce;
+      return true;
+    })
+    .catch(() => false);
+  inflight.set(form, promise);
+  return promise;
+}
+
+/**
  * Brute-force search for a nonce that makes sha256(salt + nonce) start
  * with `difficulty` zero bits. Yields to the event loop every CHUNK
  * iterations so the UI stays responsive.

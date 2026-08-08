@@ -69,8 +69,10 @@
           "rate_limit":  "Too many submissions in a short time. Please wait a moment.",
           "blocked":     "Submission blocked.",
           "mail_failed": "We could not send your message. Please try again later or write to us directly.",
-          "captcha":     "Captcha check failed. Please reload the page and try again."
+          "captcha":     "Captcha check failed. Please reload the page and try again.",
+          "captcha_unsupported": "Your browser can't complete the security check. Please update it, or open this page over HTTPS."
         },
+        "checking": "Security check running …",
         "consentBefore": "I have read and accept the ",
         "consentLink":   "privacy policy",
         "consentAfter":  "."

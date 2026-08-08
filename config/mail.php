@@ -31,7 +31,7 @@ return [
         'send_txt'                    => true,    // include plain-text alt-part
         'send_confirmation_to_sender' => true,
         'reply_to_sender'             => true,    // Reply-To = submitter's email
-        'daily_max'                   => 50,      // hard cap to protect host quotas
+        'daily_max'                   => 200,      // hard cap to protect host quotas
 
         /**
          * Audit log of every send attempt — date-bucketed, auto-pruned.
