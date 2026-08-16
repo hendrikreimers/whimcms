@@ -11,6 +11,15 @@
      pages stay out of search. Remove the indexable=false flip on launch. #}
   {% if: !SEO.indexable %}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />{% endif %}
 
+  {# The page-descriptive tags below are suppressed on the error page.
+     PageRenderer::renderNotFound renders this layout with the home
+     slug, so without this gate every 404 would claim the homepage as
+     its canonical (inviting soft-404 consolidation) and ship a social
+     card combining the error title with the homepage URL. An error
+     page describes nothing, so it describes nothing about itself.
+     The robots meta above stays OUTSIDE the gate on purpose: a
+     non-indexable install must keep its 404 out of the index too. #}
+  {% if: PAGE != '_error' %}
   <link rel="canonical" href="{{ SEO.canonical }}" />
 
   {# hreflang alternates — one per supported language plus x-default. #}
@@ -35,6 +44,8 @@
   {% if: SEO.ogImage %}<meta name="twitter:image" content="{{ SEO.ogImage }}" />{% endif %}
   {% if: SEO.twitterHandle %}<meta name="twitter:site" content="{{ SEO.twitterHandle }}" />{% endif %}
 
+  {% endif %}
+
   <link rel="icon" type="image/svg+xml" href="{{ BASE }}{{ THEME_URL }}/assets/favicon.svg" />
 
   {# Google Fonts — Inter is the system-font of the core theme. The
@@ -49,9 +60,22 @@
 
   <script type="module" src="{{ BASE }}{{ THEME_URL }}/js/main.js?v={{ CACHE_BUSTER }}"></script>
 
-  {# Structured data — encoded so the JSON contains no literal HTML-
-     special characters and survives the engine's raw-output sanitiser. #}
-  <script type="application/ld+json">{!! SEO.ldJson !!}</script>
+  {# Structured data. Two things about this line are easy to get wrong:
+
+     `{% html: %}`, NOT `{!! !!}`. The latter is not raw output — it runs
+     through Sanitizer::sanitizeEm(), which htmlspecialchars-escapes the
+     JSON's structural quotes into &quot;. HTML entities are not decoded
+     inside <script>, so the block would be syntactically invalid JSON-LD
+     and every consumer would ignore it silently. This file shipped that
+     bug until 2026-08-16, with a comment claiming the encoding let it
+     "survive the engine's raw-output sanitiser". It does not.
+
+     What the encoding DOES buy: PageSeo::buildLdJson uses JSON_HEX_TAG,
+     so no literal `<` can occur and the value cannot escape the script
+     element regardless of what an operator puts in config/seo.php. That
+     is why `{% html: %}` is defensible here — this is server-generated
+     JSON from config, not an i18n string and not request-derived. #}
+  {% if: PAGE != '_error' %}<script type="application/ld+json">{% html: SEO.ldJson %}</script>{% endif %}
 </head>
 <body class="theme theme-core" data-page="{{ PAGE }}">
   <a class="skip-link" href="#main">{{ CURRENT_LANG.a11y.skipLink }}</a>

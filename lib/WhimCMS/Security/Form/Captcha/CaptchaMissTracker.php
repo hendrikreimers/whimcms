@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS\Security\Form\Captcha;
 
+use H42\WhimCMS\Io\FileRewrite;
 use H42\WhimCMS\Log;
+use H42\WhimCMS\Security\ThrottleKey;
 
 /**
  * Per-IP counter for captcha-missing submissions.
@@ -49,8 +51,21 @@ final class CaptchaMissTracker
      * this insertion has reached the configured threshold (caller
      * should escalate to a Blocklist strike).
      *
-     * Fails open on FS errors — same posture as RateLimiter. A
-     * misconfigured filesystem must not lock out submissions.
+     * Fails open on state-FILE errors (open, lock, rewrite) —
+     * deliberately the OPPOSITE of RateLimiter's fail-closed posture
+     * (an earlier comment here claimed "same posture", which was
+     * wrong). Why open is right for this class: in the contact
+     * pipeline `RateLimiter::hit()` runs BEFORE any captcha handling
+     * and fails closed, so on a broken filesystem every submission is
+     * already rejected upstream and no abuse reaches this tracker.
+     * All failing open costs is one uncounted miss — whereas failing
+     * closed would mint blocklist strikes against legitimate visitors
+     * for a disk fault.
+     *
+     * One deliberate exception: an uncreatable state DIRECTORY throws
+     * from ensureDir() and surfaces as a 500 — that is a deployment
+     * fault (var/ unwritable), not a runtime hiccup, and hiding it
+     * would leave the operator blind.
      */
     public function bumpAndExceeded(string $ip, ?int $now = null): bool
     {
@@ -64,7 +79,11 @@ final class CaptchaMissTracker
             return false;
         }
         try {
-            flock($fh, LOCK_EX);
+            // Unacquirable lock → miss not counted (open posture above).
+            if (!flock($fh, LOCK_EX)) {
+                Log::error('CaptchaMissTracker: cannot acquire lock; miss not counted', ['path' => $path]);
+                return false;
+            }
             rewind($fh);
             $raw = stream_get_contents($fh);
             $entries = $this->decode($raw === false ? '' : $raw);
@@ -73,15 +92,17 @@ final class CaptchaMissTracker
             $entries = array_values(array_filter($entries, static fn(int $t) => $t >= $cutoff));
             $entries[] = $now;
 
-            // Same posture as RateLimiter: ftruncate+fwrite on the held
-            // fh keeps the lock anchored to the same inode for the full
-            // read-modify-write — no orphaned-inode lost-update race
-            // under concurrent captcha-missing submissions.
+            // Rewrite on the held fh keeps the lock anchored to the
+            // same inode for the full read-modify-write (see
+            // FileRewrite). Verified: a short write restores the
+            // previous window instead of silently resetting it. On
+            // failure this miss goes uncounted — the class's open
+            // posture (see bumpAndExceeded docblock).
             $payload = json_encode($entries, JSON_UNESCAPED_SLASHES) ?: '[]';
-            ftruncate($fh, 0);
-            rewind($fh);
-            fwrite($fh, $payload);
-            fflush($fh);
+            if (!FileRewrite::replace($fh, $payload, $raw === false ? '' : $raw)) {
+                Log::error('CaptchaMissTracker: state rewrite failed; miss not counted', ['path' => $path]);
+                return false;
+            }
             @chmod($path, 0o600);
             return count($entries) >= $this->threshold;
         } finally {
@@ -90,10 +111,14 @@ final class CaptchaMissTracker
         }
     }
 
+    /**
+     * Same key derivation as `Blocklist` — mandatory, not cosmetic.
+     * This tracker escalates into that store, so both must agree on
+     * which client a strike belongs to. See `ThrottleKey`.
+     */
     private function pathFor(string $ip): string
     {
-        $key = hash_hmac('sha256', $ip, $this->secret);
-        return $this->dir . '/' . substr($key, 0, 32) . '.json';
+        return $this->dir . '/' . ThrottleKey::derive($ip, $this->secret) . '.json';
     }
 
     private function ensureDir(): void

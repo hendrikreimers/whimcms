@@ -88,9 +88,17 @@ final class Recycler
 
         $target = $this->buildTargetPath($recyclerReal, $lang, $slug);
 
-        // Use rename() — atomic on POSIX, preserves the original mtime
-        // by default (good for "deleted at" forensics; the recycler
-        // file's CTIME changes, the MTIME stays the original write time).
+        // Use rename() — atomic on POSIX. It PRESERVES the source's
+        // mtime (only the ctime moves), so a recycler file's mtime is
+        // the page's last EDIT, never its deletion. The "deleted at"
+        // answer comes from the timestamp buildTargetPath() writes into
+        // the FILENAME; that is the only durable record of it.
+        //
+        // An earlier version of this comment called the preserved mtime
+        // "good for 'deleted at' forensics" — the opposite of true, and
+        // exactly the assumption that made the ASSET recycler delete
+        // files on the day they were put there (fixed 2026-08-13).
+        // Do not reintroduce mtime as a deletion timestamp anywhere.
         if (!@rename($sourceReal, $target)) {
             throw new \RuntimeException("Failed to move file into recycler: {$sourceReal}");
         }

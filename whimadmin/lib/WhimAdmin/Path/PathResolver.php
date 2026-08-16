@@ -17,11 +17,28 @@ namespace H42\WhimAdmin\Path;
  *   3. Drop a deny-all .htaccess inside var/ if missing (defence in
  *      depth — the front .htaccess already routes /var/* to the
  *      front controller, but a misconfigured Apache could expose it).
- *   4. Realpath-contain every returned path under whimadmin's root.
+ *   4. Return the fixed set of subdirectory paths.
  *
- * Security: paths are not user-supplied. The resolver hard-codes the
- * subdirectory names — there is no `paths.*` config key analogous to
- * the core. WhimAdmin lives in a fixed layout next to the core.
+ * ⚠️ Step 4 previously read "Realpath-contain every returned path under
+ * whimadmin's root." That is not what this class does, and the gap is
+ * wider than the wording suggests: `var`, `state` and `logs` are plain
+ * string concatenation; `views` and `config` call `realpath()` but fall
+ * back to the raw concatenated string via `?:` — and **no returned path
+ * is ever compared against the root**, so nothing here is "contained" in
+ * the sense that word carries elsewhere in the project (see the core's
+ * `Path\PathResolver::realpathContain`, which does perform the check).
+ *
+ * Why that is tolerable here, and the condition on which it rests:
+ * paths are **not user-supplied**. The resolver hard-codes every
+ * subdirectory name — there is no `paths.*` config key analogous to the
+ * core's. The only way to escape is a symlink placed inside
+ * `whimadmin/var/` by someone who already has local write access, and
+ * who therefore already owns the state this would protect.
+ *
+ * **If a configurable path is ever introduced here, this docblock stops
+ * being true and a real containment check becomes mandatory.**
+ *
+ * WhimAdmin lives in a fixed layout next to the core.
  */
 final class PathResolver
 {

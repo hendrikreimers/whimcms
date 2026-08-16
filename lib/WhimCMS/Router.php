@@ -47,11 +47,24 @@ final class Router
     public static function stripBase(string $rawUri, string $basePath): string
     {
         $rawUri = self::stripUnsafe($rawUri);
-        // parse_url() returns string|false|null; `??` only catches null, so a
-        // malformed URI (e.g. "//a:b" — passes RequestSecurity, no NUL/CR/LF)
-        // would leave a `false` that trips str_starts_with()/trim() under
-        // strict_types (TypeError → 500 instead of a clean 404). Coerce any
-        // non-string result to '' explicitly.
+        // parse_url() is here for ONE job: cut the query string and the
+        // fragment off REQUEST_URI. Nothing else about it is relied upon.
+        //
+        // Its RFC 3986 §4.2 behaviour — reading a leading `//` as an
+        // authority and discarding the first segment — is NOT wanted and
+        // was a real vulnerability: Apache and PHP resolved different
+        // paths for one request, which defeated a URI-pattern-anchored
+        // auth rule. Such requests are now refused at the gate by
+        // `Security\Http\RequestSecurity::rejectUnsafeRequest()`, which
+        // both front controllers call before any path logic runs.
+        // An earlier version of this comment stated that `"//a:b"`
+        // "passes RequestSecurity" — since 2026-08-13 it does not.
+        //
+        // The coercion below stays as a second line: parse_url() returns
+        // string|false|null and `??` only catches null, so a malformed
+        // URI would otherwise leave a `false` that trips
+        // str_starts_with()/trim() under strict_types (TypeError → 500
+        // instead of a clean 404).
         $parsed = parse_url($rawUri, PHP_URL_PATH);
         $path   = is_string($parsed) ? $parsed : '';
         if ($basePath !== '' && str_starts_with($path, $basePath)) {

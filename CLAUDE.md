@@ -385,7 +385,7 @@ asset roots and emits the cache URL (`/img-c/<basename>-<hash>.<ext>`).
 {% for: list, as: 'item' %}…{% endfor %} loop (`as:` is mandatory)
 {% for: list, as: 'item', include: 'path' %}  inline-include loop (no body)
 {% blocks %}           render the page's block stream
-{% html: body %}       verbatim — restricted to Markdown-rendered bodies only
+{% html: body %}       verbatim — restricted: Markdown bodies + SEO.ldJson
 {% safe_href: expr %}  href value, scheme-allowlisted + HTML-escaped
 {% image: 'path', width: N, height: N %}  cropped/scaled image variant URL
 {% lookup: map, key: keyExpr %}          dynamic key access (URLS[item.slug] equivalent)
@@ -413,9 +413,19 @@ identifiers (`PAGE == 'home'`), not `%PAGE%`. Loop bindings expose
 A block partial can read both at the same time — `attrs.title` for
 its own data, `CURRENT_LANG.x` for shared chrome strings.
 
-`{% html: %}` is audit-restricted. Only legitimate sources today:
-`Markdown::render()` output passed in via the block `body` slot. Do
-not `{% html: %}` arbitrary i18n strings or attribute values.
+`{% html: %}` is audit-restricted. Two legitimate sources today:
+(1) `Markdown::render()` output passed in via the block `body` slot;
+(2) `SEO.ldJson` inside `<script type="application/ld+json">` in the
+layouts — server-built from `config/seo.php` and `JSON_HEX_TAG`-encoded,
+so it cannot contain a literal `<`. Do not `{% html: %}` arbitrary i18n
+strings or attribute values.
+
+⚠️ Do not "simplify" that JSON-LD line to `{!! !!}`. `{!! !!}` is a
+sanitiser, not raw output — it escapes the JSON's structural quotes, and
+entities are not decoded inside `<script>`, so the block becomes invalid
+JSON-LD and fails silently. All five bundled layouts shipped that bug
+until 2026-08-16. Full reasoning: `_docs/TEMPLATING.md → {!! !!} vs
+{% html: %}`.
 
 `{@ name … @}` annotations are extracted by the engine at boot and
 dispatched to `AnnotationConsumer` directives. The first user is

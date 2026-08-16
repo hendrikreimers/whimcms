@@ -204,13 +204,36 @@ Every state mutation goes through:
 3. `chmod 0o600` (or `0o644` for files Apache must read).
 4. `rename` atomically over the target.
 
-A partial write cannot poison readers because `rename` is atomic
-on POSIX. The temp file's random suffix prevents collisions on
-concurrent saves of unrelated state.
+`rename` is atomic on POSIX, so no reader ever observes a
+half-swapped file. **That guarantees the swap, not the contents.**
+`file_put_contents` does not return `false` when the filesystem
+runs out of space — it returns the number of bytes it managed to
+write. A short write therefore produces a *complete-looking* temp
+file that step 4 then promotes atomically, and readers see intact
+but truncated state. Step 2 must compare the return value against
+`strlen($payload)` and discard the fragment; testing `=== false`
+alone is not enough:
+
+```php
+$written = @file_put_contents($tmp, $json, LOCK_EX);
+if ($written === false || $written !== strlen($json)) {
+    @unlink($tmp);
+    throw new \RuntimeException('…');
+}
+```
+
+The temp file's random suffix prevents collisions on concurrent
+saves of unrelated state.
 
 Files using this pattern: `Secret`, `SetupTokenStore`, `OtpStore`,
 `UserStore`, `Session`, `ClipboardStore`, `PageRepository`,
 `HistoryStore`, `PhpArrayWriter`.
+
+Of these, **`Session` and `OtpStore` verify the byte count; the
+others test `=== false` only** and are exposed to the truncation
+described above. This is a known, accepted gap — it requires a
+full disk, quota or inode exhaustion to reach. Do not read the
+list above as a blanket assurance.
 
 ### Round-trip integrity check
 

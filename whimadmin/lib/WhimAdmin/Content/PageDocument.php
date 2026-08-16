@@ -33,6 +33,24 @@ use H42\WhimCMS\Content\ParseException;
  * pipelines. A `.md` that fails to load in the public site fails
  * to load here — a single error model.
  *
+ * ⚠️ One documented exception to that parity, in the value-length
+ * limit. `validateScalar()` below compares against the **constant**
+ * `AttributeParser::MAX_VALUE_LEN`, while the public pipeline enforces
+ * the **live** limit that `AttributeParser::setLimits()` installs from
+ * `config/content.php → content.attribute_parser.max_value_len`. No
+ * getter for the live value exists, which is why the constant is used.
+ *
+ * Currently latent: the shipped config sets exactly the constant's
+ * value, so both sides agree. **Lowering the config value breaks the
+ * parity in the damaging direction** — the editor would accept and save
+ * a value the public parser then rejects. Raising it is harmless here
+ * (the admin merely stays stricter).
+ *
+ * Note for anyone fixing this: it has two halves. whimadmin never calls
+ * `AttributeParser::setLimits()` at all, so teaching `validateScalar` to
+ * read a live limit is useless until the admin bootstrap also loads
+ * `config/content.php`.
+ *
  * Validation NOT done here:
  *   - Block-type allowlist (Phase 3 will check against the schema
  *     sidecar + the core's BlockRegistry).

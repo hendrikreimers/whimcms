@@ -22,6 +22,28 @@ namespace H42\WhimCMS\Security\Form\Captcha;
  *     → caller actually paid the CPU cost.
  *
  * No DB, no session — same `secret` as Csrf signs both.
+ *
+ * **The challenge carries NO client binding, and that is load-bearing
+ * on a precondition rather than on this class.** `issue()` signs only
+ * (ts, difficulty, salt), so nothing in the token says who it was
+ * handed to. What makes that safe is the order every consumer must
+ * keep: the CSRF token is validated FIRST, and that one IS client-
+ * bound (`Csrf::deriveBindKey`). A submission therefore cannot present
+ * a challenge issued to somebody else without also presenting a CSRF
+ * token issued to that same client. `ContactController` relies on it —
+ * token at step 2, captcha at step 5.
+ *
+ * A future second consumer that called `validate()` WITHOUT a
+ * preceding, client-bound CSRF check would void that argument and
+ * would have to mix the bindKey into the signature here.
+ *
+ * Adding the binding anyway was examined on 2026-08-13 and rejected:
+ * it would not stop the threat usually cited for it — pre-computing
+ * on rented hardware — because the salt is public in the markup and
+ * only the CHALLENGE could be bound, never the nonce. The work stays
+ * outsourceable either way; what binding would prevent (redeeming one
+ * solution from many clients) is already prevented twice over, by the
+ * single-use CaptchaStore and by the client-bound CSRF token.
  */
 final class Captcha
 {

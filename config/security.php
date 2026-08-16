@@ -16,7 +16,31 @@ return [
     // =================================================================
 
     'csrf' => [
-        /** Form must be submitted at least this many seconds after render (anti-bot). */
+        /**
+         * Form must be submitted at least this many seconds after render
+         * (anti-bot).
+         *
+         * ⚠️ DUPLICATED CLIENT-SIDE. `theme/js/contact-form.js` holds
+         * `MIN_TOKEN_AGE_MS = 3200` — the time the script waits after
+         * fetching a fresh token pair before it resubmits. There is no
+         * channel between the two values; the form carries no min-age
+         * attribute and there is no build step.
+         *
+         * The failure is one-directional:
+         *   LOWERING this value  → harmless, the client merely waits
+         *                          longer than required.
+         *   RAISING it above ~3.2 s → BREAKS the automatic retry. The
+         *                          script resubmits after 3200 ms, the
+         *                          server rejects the token as too young,
+         *                          and the visitor gets "session expired"
+         *                          with no way to recover — the script
+         *                          retries exactly once.
+         *
+         * The real margin is ~3.3-3.7 s (the client stamps its clock on
+         * receipt, the server stamped the token during render), so 4
+         * definitely breaks and 3.5 is flaky. **Raise this only together
+         * with MIN_TOKEN_AGE_MS.**
+         */
         'min_age_seconds' => 3,
         /**
          * Form is rejected after this many seconds (anti-replay).

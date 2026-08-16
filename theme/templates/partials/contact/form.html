@@ -1,27 +1,7 @@
-{# The data-l-* attributes below hand the theme's existing i18n error
-   strings to js/contact-form.js — the same pattern the layout uses for
-   its a11y labels. Without them the module falls back to built-in
-   English text, because JS has no access to the language dictionary.
-   The codes come from lib/WhimCMS/Form/Validator.php and are the same
-   ones partials/contact/error.html resolves server-side; a theme that
-   translates further codes (invalid_phone / invalid_choice for tel and
-   select fields) should add the matching attributes here. #}
 <form class="contact-form" data-contact-form method="post" action="{{ CURRENT_PAGE_URL }}#contact" novalidate
       data-captcha-salt="{{ CAPTCHA.salt }}"
       data-captcha-difficulty="{{ CAPTCHA.difficulty }}"
-      data-captcha-enabled="{% if: CAPTCHA.enabled %}1{% endif %}"
-      data-l-checking="{{ CURRENT_LANG.home.contact.form.checking }}"
-      data-l-err-required="{{ CURRENT_LANG.home.contact.form.errors.required }}"
-      data-l-err-too-short="{{ CURRENT_LANG.home.contact.form.errors.too_short }}"
-      data-l-err-too-long="{{ CURRENT_LANG.home.contact.form.errors.too_long }}"
-      data-l-err-invalid-format="{{ CURRENT_LANG.home.contact.form.errors.invalid_format }}"
-      data-l-err-invalid-email="{{ CURRENT_LANG.home.contact.form.errors.invalid_email }}"
-      data-l-glob-token="{{ CURRENT_LANG.home.contact.form.globalErrors.token }}"
-      data-l-glob-rate-limit="{{ CURRENT_LANG.home.contact.form.globalErrors.rate_limit }}"
-      data-l-glob-blocked="{{ CURRENT_LANG.home.contact.form.globalErrors.blocked }}"
-      data-l-glob-mail-failed="{{ CURRENT_LANG.home.contact.form.globalErrors.mail_failed }}"
-      data-l-glob-captcha="{{ CURRENT_LANG.home.contact.form.globalErrors.captcha }}"
-      data-l-glob-captcha-unsupported="{{ CURRENT_LANG.home.contact.form.globalErrors.captcha_unsupported }}">
+      data-captcha-enabled="{% if: CAPTCHA.enabled %}1{% endif %}">
   <input type="hidden" name="_token" value="{{ FORM_TOKEN }}" />
   <input type="hidden" name="_captcha_token" value="{{ CAPTCHA.token }}" />
   <input type="hidden" name="_captcha_nonce" value="" data-captcha-nonce />

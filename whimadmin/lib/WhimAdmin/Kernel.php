@@ -45,6 +45,8 @@ use H42\WhimAdmin\Path\PathResolver;
 use H42\WhimAdmin\View\Renderer;
 use H42\WhimCMS\Config as CoreConfig;
 use H42\WhimCMS\Mail\PhpMailTransport;
+use H42\WhimCMS\Maintenance\Coordinator;
+use H42\WhimCMS\Maintenance\TtlFileSweeper;
 use H42\WhimCMS\Security\RateLimiter;
 use H42\WhimCMS\Security\Secret;
 
@@ -95,6 +97,7 @@ final class Kernel
     private HistoryStore $contentHistory;
     private Recycler $contentRecycler;
     private RecyclerSweeper $recyclerSweeper;
+    private Coordinator $stateMaintenance;
     private PageTypeSchemaLoader $pageTypes;
     private TreeAggregator $treeAggregator;
     private OverlayWriter $overlayWriter;
@@ -329,6 +332,93 @@ final class Kernel
             contentMaxAgeDays:  (int)($rec['content_max_age_days']   ?? 30),
             assetsMaxAgeDays:   (int)($rec['assets_max_age_days']    ?? 30),
         );
+
+        $this->bootstrapStateMaintenance();
+    }
+
+    /**
+     * Retention sweepers for whimadmin's own `var/state/` stores —
+     * shares the core `Maintenance` classes; TTLs derive from this
+     * kernel's config windows (no second source of truth). Same mtime
+     * argument as the core wiring: every store rewrites its file on
+     * activity, so `now − mtime > window` proves the file dead. An
+     * ACTIVE admin session refreshes its file's mtime on every request
+     * and is therefore unreachable by the sessions TTL.
+     *
+     * Trigger: registered at the same authed-only hook as the
+     * RecyclerSweeper (see dispatch()) — the deliberate posture that
+     * unauthenticated traffic can never cause filesystem work stays.
+     * Trade-off, accepted: with no admin visits, nothing ages out; the
+     * stores there grow by a handful of files per login attempt.
+     */
+    private function bootstrapStateMaintenance(): void
+    {
+        // Hourly, matching the core kernel: the deletion cap is per
+        // run, so drain rate = cap × runs/day per store (W0-A3).
+        $interval = 3600;
+        $margin   = 3600;
+        $state    = $this->paths['state'];
+
+        $rl   = (array)Config::get('rate_limit', []);
+        $sess = (array)Config::get('session', []);
+        $otp  = (array)Config::get('otp', []);
+
+        $rateWindow = (int)($rl['window_seconds'] ?? 300);
+        // Sessions: absolute lifetime plus a day of margin — an expired
+        // file is also removed by Session::load() itself when the same
+        // cookie returns; this catches the orphans where it never does.
+        $sessionTtl = (int)($sess['absolute_seconds'] ?? 28800) + 86400;
+        // OTP records die after ttl_seconds (default 300) or on use;
+        // orphans remain when the user never submits the code. Their
+        // `.lock` sidecars are excluded from sweeping — see below.
+        $otpTtl     = (int)($otp['ttl_seconds'] ?? 300) + 86400;
+
+        $this->stateMaintenance = new Coordinator(
+            new TtlFileSweeper(
+                $state . '/ratelimit',
+                $state . '/.sweep-ratelimit',
+                $interval,
+                $this->rootDir,
+                '/^[a-f0-9]{32}\.json$/',
+                $rateWindow + $margin,
+            ),
+            new TtlFileSweeper(
+                $state . '/otp-mail-counter',
+                $state . '/.sweep-otp-mail-counter',
+                $interval,
+                $this->rootDir,
+                '/^\d{4}-\d{2}-\d{2}\.txt$/',
+                8 * 86400,
+            ),
+            // Session files are `<64hex>.json` (Session::pathFor appends
+            // the extension — review finding W0-A1: the first wiring
+            // matched bare hex and therefore never swept anything).
+            // The `(\.tmp\.[a-f0-9]{12})?` tail also drains writeAtomic
+            // tempfiles orphaned by a crash between write and rename.
+            new TtlFileSweeper(
+                $state . '/auth/sessions',
+                $state . '/.sweep-auth-sessions',
+                $interval,
+                $this->rootDir,
+                '/^[a-f0-9]{64}\.json(\.tmp\.[a-f0-9]{12})?$/',
+                $sessionTtl,
+            ),
+            // OTP records + their writeAtomic tempfiles. The `.lock`
+            // sidecars are DELIBERATELY not swept (W0-A2): they are
+            // created once via fopen('c') and never written, so their
+            // mtime stays frozen at creation — a TTL would eventually
+            // delete a lock another process holds open, and the next
+            // verify() would lock a fresh inode: two holders, mutex
+            // broken. They are ~64 bytes, one per admin user, bounded.
+            new TtlFileSweeper(
+                $state . '/auth/otp',
+                $state . '/.sweep-auth-otp',
+                $interval,
+                $this->rootDir,
+                '/^[a-f0-9]{32}\.json(\.tmp\.[a-f0-9]{12})?$/',
+                $otpTtl,
+            ),
+        );
     }
 
     // ============================================================
@@ -371,6 +461,10 @@ final class Kernel
         // hot path.
         if ($session !== null && ($session['stage'] ?? '') === 'authed') {
             $this->recyclerSweeper->sweepIfDue();
+            // State-store retention runs post-response via the shutdown
+            // hook — registered here so it inherits the same authed-only
+            // gate; the sweepers themselves are sentinel-gated.
+            $this->stateMaintenance->registerShutdownHook();
         }
 
         $router  = $this->buildRouter($req, $cookies, $csrf, $cookieName, $cookieValue, $session);

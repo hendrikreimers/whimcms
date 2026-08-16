@@ -94,16 +94,23 @@ RewriteRule (^|/)_ index.php [L]
 RewriteRule (^|/)\. index.php [L]
 RewriteRule \.(env|key|sample|bak|inc\.php|class\.php|md|tmpl\.html|log)$ index.php [L]
 
-# Block all direct requests to *.php (including /index.php), with or
-# without a query string or path-info. Only clean URLs (/, /contact, …)
-# reach the front controller — those are rewritten to index.php
-# internally, and THE_REQUEST keeps the *original* request line through
-# internal rewrites, so it still contains no ".php" and is not matched
-# here. A directly requested .php URL, by contrast, has ".php" in
-# THE_REQUEST and is rejected with 403. /whimadmin/ is exempt (real PHP
-# scripts run there directly, protected by Basic Auth). [F] is terminal,
-# so there is no rewrite loop.
-RewriteCond %{THE_REQUEST} \.php[\s/?]  [NC]
+# Block all direct requests to PHP-shaped URLs (including /index.php),
+# with or without a query string or path-info. Only clean URLs
+# (/, /contact, …) reach the front controller — those are rewritten to
+# index.php internally, and THE_REQUEST keeps the *original* request
+# line through internal rewrites, so it still contains no ".php" and is
+# not matched here. A directly requested .php URL, by contrast, has
+# ".php" in THE_REQUEST and is rejected with 403. /whimadmin/ is exempt
+# (real PHP scripts run there directly, protected by Basic Auth).
+# [F] is terminal, so there is no rewrite loop.
+#
+# The pattern deliberately covers more than `.php`: `.php5`/`.php7`,
+# `.phtml`, `.phar`, `.phps`, `.pht` are all interpreter-shaped on some
+# hosts. It matches a suffix followed by whitespace, `/` or `?` — i.e.
+# the end of the path in the request line. It therefore does NOT catch
+# a double extension like `x.php.ico`, where a dot follows; that case
+# is handled where such files can actually appear, by `assets/.htaccess`.
+RewriteCond %{THE_REQUEST} \.ph(p[0-9]?|tml|ar|ps|t)[\s/?]  [NC]
 RewriteCond %{REQUEST_URI} !^/whimadmin/  [NC]
 RewriteRule ^ - [F]
 
@@ -157,7 +164,13 @@ RewriteRule ^ index.php [L]
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType text/css                "access plus 1 year"
-    ExpiresByType application/javascript  "access plus 1 year"
+    # JS deliberately SHORT — see the mod_headers block below for why.
+    # Apache serves .js as `text/javascript` today, so the old
+    # `application/javascript` line never matched anything; both spellings
+    # are listed now so a future MIME change cannot silently restore a
+    # one-year cache on ES modules.
+    ExpiresByType application/javascript  "access plus 1 hour"
+    ExpiresByType text/javascript         "access plus 1 hour"
     ExpiresByType image/svg+xml           "access plus 1 year"
     ExpiresByType font/woff2              "access plus 1 year"
     ExpiresByType image/png               "access plus 1 month"
@@ -170,8 +183,23 @@ RewriteRule ^ index.php [L]
     # Static assets get long, immutable caching. The cache buster query
     # string in the asset URLs (?v=N) ensures clients pick up new
     # versions on deploy without hand-clearing.
-    <FilesMatch "\.(css|js|svg|woff2|png|jpg|jpeg|webp)$">
+    #
+    # `js` is DELIBERATELY absent from this list. Only ONE script is
+    # referenced from the HTML (`js/main.js?v=N`); everything else is
+    # pulled in by `import './contact-form.js'` — an ES-module specifier
+    # with no query string. Under `immutable` those imports would sit in
+    # the browser for a year, and bumping CACHE_BUSTER would NOT reach
+    # them: the visitor gets a fresh main.js and a stale contact-form.js.
+    # Found 2026-08-13. Only put `js` back here once every import carries
+    # a version query.
+    <FilesMatch "\.(css|svg|woff2|png|jpg|jpeg|webp)$">
         Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    # ES modules: short cache plus revalidation, so a deploy reaches
+    # returning visitors within the hour instead of within a year.
+    <FilesMatch "\.js$">
+        Header set Cache-Control "public, max-age=3600, must-revalidate"
     </FilesMatch>
 
     # HTML / PHP must never be cached so updates land immediately.

@@ -45,7 +45,7 @@ The model focuses on:
 | Information disclosure | Stack traces, server fingerprints, indexed pre-launch pages | `debug=false` in prod, `expose_php=Off`, `seo.indexable=false` until launch |
 | Resource exhaustion | Decompression bombs, oversized parses, infinite loops | Per-component byte/depth/lines caps; image-server 25 MB / 50 MP caps |
 | Host-header poisoning | Canonical / OG / sitemap URLs reflecting attacker's `Host:` | `seo.canonical_hosts` allowlist |
-| Cache / log integrity | Cross-tenant leakage, replay, stale-orphan accumulation | Atomic writes, mtime invalidation, single-use captcha markers, blocklist with TTL. Cache cleanup via `H42\WhimCMS\Cache\Sweeper` subclasses — sentinel-gated, lock-protected, project-root-confined `realpath` containment, `lstat`-based symlink/type rejection on every destructive call |
+| Cache / log integrity | Cross-tenant leakage, replay, stale-orphan accumulation | Atomic writes, mtime invalidation, single-use captcha markers, blocklist with TTL. Cache **and state-store** cleanup via `H42\WhimCMS\Cache\Sweeper` subclasses — sentinel-gated, lock-protected, project-root-confined `realpath` containment, `lstat`-based symlink/type rejection on every destructive call — triggered once per request by the `Maintenance\Coordinator` shutdown hook (see *State-store retention*) |
 
 ## Defence layers
 
@@ -111,16 +111,16 @@ blocklist), `config/contact.php` (fields, honeypot), and `config/mail.php`
 | Layer | Config | Mechanism |
 |---|---|---|
 | HMAC-signed CSRF token | `csrf` | Per-render token, scoped to a specific form via `formId` so a token issued for one POST endpoint cannot be replayed at another (`ContactController::FORM_ID = 'contact'` today; future endpoints pick distinct strings). Client-binding strategy via `csrf.bind_strategy` — `'ip_ua'` (default), `'ua'`, or `'none'`. See `Csrf::deriveBindKey` for the trade-offs |
-| Form-timing window | `csrf.max_age`, `csrf.min_age` | Reject submissions that arrive too fast (bot) or too late (replay) |
-| Honeypot field | `contact.honeypot_field` | Hidden input; non-empty → reject, soft-block. Field `name` is derived per-installation from the application secret by default (`H42\WhimCMS\Security\Form\Honeypot::resolveFieldName`), so common bot dictionaries get no signal. Optional config override is a literal name |
-| Sliding-window rate limit | `rate_limit` | Per IP-hash bucket |
-| Soft IP blocklist | `blocklist` | Strikes accumulate across rate-limit / captcha / honeypot violations; auto-cleanup |
+| Form-timing window | `csrf.max_age_seconds`, `csrf.min_age_seconds` | Reject submissions that arrive too fast (bot) or too late (replay). Keep `captcha.max_age` equal to `csrf.max_age_seconds` — a shorter captcha window opens a band of page ages in which the token still validates and the challenge no longer does |
+| Honeypot field | `contact.honeypot_field` | Hidden input; non-empty → strike **plus a faked success response**, so a bot drains its retry budget instead of learning it was caught. Field `name` is derived per-installation from the application secret by default (`H42\WhimCMS\Security\Form\Honeypot::resolveFieldName`), so common bot dictionaries get no signal. Optional config override is a literal name |
+| Sliding-window rate limit | `rate_limit` | Per network-hash bucket (IPv6 folded to /64 — see *Client-IP bucketing* below). Counts *attempts*, not delivered mail, so the ceiling has to leave room for a visitor correcting themselves a few times |
+| Soft IP blocklist | `blocklist` | Strikes come from exactly four places, every one of them behind a *passed* CSRF check: honeypot tripped, captcha invalid, captcha replayed, captcha-miss threshold exceeded. A failed rate limit does **not** strike, and neither does a failed CSRF token — that gate is the only one reachable without a token, which made it the one an outsider could aim at a third party. Expired entries are pruned on every write; `Kernel::bootstrapMaintenance` additionally deletes the state file once every entry in it has expired. Same bucketing as the rate limit |
 | Per-field validation | `contact.fields.*` | Length, format, choice allowlists |
 | Mandatory consent checkbox | `contact.fields.consent` | GDPR; rejected if unchecked |
 | Mail daily cap | `mail.daily_max` | Independent backstop against runaway flooding |
 | Audit log | `mail.log_*` | Day-bucketed, HMAC-keyed IP hash, TTL |
 | Captcha (proof-of-work) | `captcha` | HMAC-signed challenge solved client-side; replay-protected via `CaptchaStore` single-use markers; salt 128-bit |
-| Captcha-miss throttle | `captcha.miss_threshold`, `captcha.miss_window` | Sliding-window per-IP counter for empty-captcha submits; threshold escalates to a Blocklist strike so a bot can't grind through the rate-limit ceiling by simply omitting the captcha |
+| Captcha-miss throttle | `captcha.miss_threshold`, `captcha.miss_window` | Sliding-window per-network counter for empty-captcha submits; threshold escalates to a Blocklist strike so a bot can't grind through the rate-limit ceiling by simply omitting the captcha |
 
 The captcha is the strongest of these — and it's the only one with
 a cost: no-JS users can't solve the puzzle. Acceptable trade-off
@@ -210,20 +210,111 @@ file from `content/`. Two invariants keep that safe:
   body is echoed, so an unconfigured origin fails as a clean 500 rather
   than a truncated response.
 
+### State-store retention
+
+The per-client state stores (`var/state/ratelimit/`, `captcha-miss/`,
+`captcha-used/`, `mail-counter/`, `mail-log/`; whimadmin adds
+`ratelimit/`, `otp-mail-counter/`, `auth/sessions/`, `auth/otp/` under
+its own `var/`) are aged out centrally by `Maintenance\Coordinator`, a
+shutdown-hook trigger wired once per kernel — unconditionally on the
+public site; in whimadmin registered only on authenticated requests,
+by design (unauthenticated traffic must not cause filesystem work
+there). Design properties:
+
+- **Allowlist, not a directory walk.** Each sweeper owns exactly one
+  directory and one filename pattern; anything else in the directory —
+  a stray `.htaccess`, tmp files, legacy markers — is never touched.
+- **Derived TTLs.** Every TTL is computed from the config window that
+  already governs the store (rate-limit window, captcha max-age,
+  session absolute lifetime, `mail.log_retention_days`) plus a margin.
+  There is no second retention knob to misconfigure.
+- **Provably-safe deletion.** The writers rewrite their state file on
+  every hit, so `mtime` is the time of the last hit and every entry
+  inside is older. Once `now − mtime` exceeds the store's window, all
+  entries are expired by definition — only then may the file go. An
+  active admin session refreshes its file on every request and is
+  therefore unreachable.
+- **Bounded work.** Deletions are capped at 500 per run, and runs are
+  sentinel-paced (hourly for the state-file stores, daily for the
+  mail-log day buckets) — a backlog drains at up to 12 000 files per
+  day and store without any single visitor paying for the cleanup.
+  Under PHP-FPM the response is handed off (`fastcgi_finish_request`)
+  before any sweeping, so visitors never wait; FPM is opportunistic,
+  never required.
+- **Inherited hardening.** All sweepers extend `Cache\Sweeper`:
+  realpath containment under the project root, lstat-based refusal of
+  symlinks and non-regular files, recursion depth cap, non-fatal
+  failure mode.
+- **Functional pruning stays in the writers.** Dropping expired
+  timestamps from a rate-limit window on each hit is correctness
+  logic, not cleanup — the sweepers delete dead files, never entries.
+
+Mail-log retention notably no longer depends on `mail.log_enabled`:
+turning the log off used to freeze the existing records forever,
+because the pruner only ran inside the writer.
+
+### Client-IP bucketing
+
+The three throttling stores do **not** key on the client address
+directly. They share `Security\ThrottleKey::derive()`, which first
+reduces the client to the unit that gets one counter and only then
+applies the HMAC.
+
+**IPv6 is folded onto its `/64` network; IPv4 is used as-is.** With
+IPv4 a connection has one public address, so hashing the address is a
+workable stand-in for "one subscriber, one counter". IPv6 breaks that:
+the provider delegates a prefix to the connection and the *device*
+chooses the lower 64 bits, rotating them on a timer (privacy
+extensions, RFC 7934 / RFC 6177). Keying on the full address would
+hand a single connection 2^64 fresh counters and make the rate limit,
+the blocklist and the captcha-miss throttle inoperative for any IPv6
+client — including at the admin login, which shares `RateLimiter`.
+`/64` is the smallest unit a client cannot choose for itself; `/48` or
+`/32` would be an ISP allocation spanning unrelated customers.
+
+Two address shapes are handled explicitly, because a naive "keep the
+upper 8 bytes" would collapse them all into one shared bucket — which
+is worse than the gap being closed, since one bad actor could then
+strike that bucket and lock out everyone in it:
+
+- IPv4-mapped `::ffff:a.b.c.d` is folded to its plain IPv4 form, so one
+  machine cannot occupy two buckets by arriving in two spellings.
+- Any other all-zero prefix (`::1`, the deprecated IPv4-compatible
+  `::a.b.c.d`) keeps its full, canonicalised address — `::/64` is not a
+  network in any meaningful sense.
+
+Non-IP inputs pass through untouched, so a caller may add a second,
+coarser bucket (e.g. a per-resource key) alongside the per-client one.
+
+**Collateral is symmetric with IPv4.** A guest WLAN inside one `/64`
+shares a counter, exactly as everyone behind one carrier-grade NAT
+address already does. This does not make IPv6 worse than IPv4; it makes
+it equal. Size the thresholds in `config/security.php` for that shared
+case — the shipped defaults already are.
+
+**The audit trails are deliberately excluded.** `MailLog`'s `ip_hash`
+and the admin `Audit\Log` keep the full address: a counter answers
+"which connection?", a log entry answers "which device?". Do not
+"harmonise" them onto `ThrottleKey` — the divergence is the design.
+
 ### Reverse proxy / CDN adaptation
 
 Several defences key off the **client IP**:
 
-- Rate limit (`RateLimiter`) — buckets requests per IP-hash.
-- Soft blocklist (`Blocklist`) — strikes accumulate per IP-hash.
-- Captcha-miss tracker (`CaptchaMissTracker`) — sliding-window per IP-hash.
+- Rate limit (`RateLimiter`) — buckets requests per network-hash.
+- Soft blocklist (`Blocklist`) — strikes accumulate per network-hash.
+- Captcha-miss tracker (`CaptchaMissTracker`) — sliding-window per
+  network-hash.
 - CSRF binding (`Csrf::deriveBindKey`) — token signature mixes the
   client surfaces selected by `csrf.bind_strategy` (default `'ip_ua'`
   = IP + UA, `'ua'` = UA-only, `'none'` = no client binding).
-- Mail audit log (`MailLog`) — HMAC-keyed IP hash per send.
+- Mail audit log (`MailLog`) — HMAC-keyed IP hash per send, over the
+  full address (see *Client-IP bucketing* above).
 
 The IP comes from `Security\Http\ClientIp::resolve()`, which on a
 direct-Apache deployment is functionally `$_SERVER['REMOTE_ADDR']`.
+`resolve()` returns a real, parseable address — never a network prefix;
+the `/64` reduction happens in `ThrottleKey`, at the point of use.
 
 **Behind a CDN, reverse proxy, or load balancer** (Cloudflare, Fastly,
 nginx, K8s ingress, …) every request arrives with `REMOTE_ADDR` set

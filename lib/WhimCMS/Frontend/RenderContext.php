@@ -69,7 +69,7 @@ final class RenderContext
         // template can render the hidden inputs without conditional
         // shape changes; enforcement is gated by config in the controller.
         $captchaCfg = (array)Config::get('captcha', []);
-        $captchaEnabled = (bool)($captchaCfg['enabled'] ?? false);
+        $captchaEnabled = (bool)($captchaCfg['enabled'] ?? true);
         $captcha = Captcha::issue(
             $secret,
             max(0, (int)($captchaCfg['difficulty'] ?? 16))

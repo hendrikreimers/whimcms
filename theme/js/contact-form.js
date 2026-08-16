@@ -117,12 +117,13 @@ async function handleSubmit(event, form) {
 
     // Not an input mistake but an expired or spent token: re-arm and
     // retry exactly once. Ideally the visitor notices nothing but a
-    // short delay.
-    const rearmed = await rearm(form);
-    const retryable = rearmed
-      && (result.global_error === 'token' || result.global_error === 'captcha');
+    // short delay. Only these two codes are worth a second attempt —
+    // `blocked`, `rate_limit` and `mail_failed` answer the same way
+    // however often we ask.
+    const recoverable = result.global_error === 'token' || result.global_error === 'captcha';
+    const rearmed = recoverable ? await rearm(form) : false;
 
-    if (retryable) {
+    if (rearmed) {
       const second = await postOnce(form);
       if (second.ok && second.redirect) {
         window.location.assign(second.redirect);
@@ -135,12 +136,38 @@ async function handleSubmit(event, form) {
       return;
     }
 
+    // Show the verdict FIRST. It was already final when the response
+    // arrived, so making the visitor sit through a page fetch plus a
+    // fresh proof-of-work before they get to read it only makes the form
+    // look hung — same reasoning as the field-error branch above.
     applyErrors(form, result);
+    // Re-arm afterwards all the same. The form still holds a spent pair,
+    // and `mail_failed` in particular means the captcha WAS consumed, so
+    // leaving it there would turn the visitor's next click into a replay
+    // — and a replay costs a blocklist strike. Do NOT "simplify" this
+    // away. Skipped when the re-arm above already ran and failed, since
+    // repeating it would only repeat the failure.
+    if (!recoverable) {
+      await rearm(form);
+    }
   } catch (err) {
     // Network error or non-JSON response — fall back to classic POST so
     // the user still gets a path forward. The server then re-renders the
     // page and issues fresh tokens itself, so this module's worst case
     // is an ordinary full-page post.
+    //
+    // Drop the nonce before that post. From here we cannot tell whether
+    // the request reached the server: a non-JSON body (an error page,
+    // typically a 500) means it did, and the pair is spent. Resending a
+    // spent nonce is scored as a REPLAY — a blocklist strike against a
+    // visitor for a fault that was ours. An empty nonce is read as
+    // "solver never ran" instead: counted in a sliding window, but not
+    // punished. The price of clearing unconditionally is that a genuine
+    // network drop, where the submission never arrived, now costs one
+    // more click rather than going through — the visitor lands on the
+    // re-rendered page with their text intact and fresh credentials.
+    // Cheap next to an undeserved 15-minute block.
+    setHidden(form, '_captcha_nonce', '');
     form.dataset.noFetch = '1';
     form.submit();
     return;
@@ -233,7 +260,7 @@ async function rearm(form) {
     // The wait runs on EVERY path where tokens were replaced above —
     // including a failed re-solve. Otherwise a brand-new token would sit
     // in the form with the button already released, and the next click
-    // would run into "invalid token" plus a blocklist strike.
+    // would run into "invalid token".
     const age = Date.now() - issuedAt;
     if (age < MIN_TOKEN_AGE_MS) {
       await sleep(MIN_TOKEN_AGE_MS - age);

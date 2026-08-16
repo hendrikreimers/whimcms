@@ -23,11 +23,19 @@ use H42\WhimCMS\Content\Identifiers;
  *                   (layout, meta.title, meta.description, disabled, hidden)
  *
  * Per-field validation happens here (Identifiers patterns, anchor
- * regex, url-path shape, bool coercion). HrefSanitizer is NOT run
- * here — the OverlayWriter's validateItem() is the canonical gate
- * for href values, since the same allowlist is enforced at commit
- * time. Running it twice would only add a second failure mode for
- * the same input.
+ * regex, url-path shape, bool coercion).
+ *
+ * HrefSanitizer IS run here, in `case 'link'` below — deliberately, as
+ * defence in depth, with its own note at the call site. The canonical
+ * gate remains OverlayWriter::validateItem(), which enforces the same
+ * allowlist at commit time; this decode-time check is the second line,
+ * not a replacement.
+ *
+ * ⚠️ This paragraph previously asserted the exact opposite ("HrefSanitizer
+ * is NOT run here"). It was wrong, and wrong in the dangerous direction:
+ * a reader trusting it would have removed a live security check as
+ * redundant. Verify against the code below before believing either
+ * statement.
  *
  * Unknown fields (POSTed but not in the schema) are silently dropped
  * — the schema is the contract, not the request body. This is the

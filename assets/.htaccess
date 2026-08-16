@@ -1,0 +1,52 @@
+# assets/ holds the raster sources the image server reads and the
+# originals the admin's asset browser uploads. Unlike var/ or lib/,
+# this directory MUST stay publicly readable — so the deny below is
+# deliberately narrow: it targets only what a webserver might hand to
+# an interpreter instead of sending as bytes. Images (jpg, png, webp,
+# gif, ico), svg, fonts, pdf and md are untouched.
+#
+# Why this file exists: the admin upload filter inspects only the LAST
+# extension (AssetBrowser::assertExtensionAllowed, via pathinfo), so a
+# name like `photo.php.ico` passes as an .ico — and .ico is not
+# byte-validated either (only png/jpg/jpeg/webp/gif are). On hosts that
+# bind PHP to arbitrary extensions via AddHandler/AddType (a
+# shared-hosting classic) such a file would execute. The root .htaccess
+# does NOT catch it: its .php rule matches THE_REQUEST followed by a
+# space, `/` or `?` — after `photo.php.ico` comes a dot.
+#
+# Scope, honestly: this stops EXECUTION, not the upload. Such a file
+# can still be stored. Reaching the upload form requires an
+# authenticated editor, so that is the accepted boundary.
+#
+# The two mechanisms are NOT equivalent:
+#   - `Require all denied` is the one that always works. It refuses the
+#     request wherever the suffix sits in the name — `(\.|$)` is the
+#     whole point of the pattern.
+#   - RemoveHandler/RemoveType only drop an inherited mod_mime binding.
+#     Under PHP-FPM (`SetHandler proxy:fcgi`) they do nothing at all.
+#     They are here for the mod_mime hosts this finding is about.
+#
+# Perl/Python/shell suffixes are deliberately NOT in the pattern: `.pl`
+# is also a language code, so `banner.pl.jpg` would be blocked for a
+# Polish variant — a false positive nobody would trace back to this
+# file. The finding is about PHP.
+
+# `.shtml`/`.shtm` are in the list for server-side includes: with
+# `Options +Includes` an SSI file can read and emit other files. Only
+# the deny below and RemoveType cover it here — a host that wires SSI
+# through `AddOutputFilter INCLUDES` would additionally need
+# `RemoveOutputFilter`, which is deliberately not set because the deny
+# already refuses the request outright.
+<IfModule mod_mime.c>
+    RemoveHandler .php .php3 .php4 .php5 .php7 .php8 .phtml .phar .phps .pht .cgi .shtml .shtm
+    RemoveType    .php .php3 .php4 .php5 .php7 .php8 .phtml .phar .phps .pht .cgi .shtml .shtm
+</IfModule>
+
+# `(?i)` is load-bearing, not decoration: <FilesMatch> compares
+# case-sensitively while mod_mime treats extensions case-insensitively.
+# Without it `photo.PHP.ico` slips past this deny — and it slips past
+# exactly where the deny is the only thing that works, namely on a
+# PHP-FPM host whose SetHandler pattern is not anchored.
+<FilesMatch "(?i)\.(ph(p[0-9]?|tml|ar|ps|t)|cgi|shtml?)(\.|$)">
+    Require all denied
+</FilesMatch>

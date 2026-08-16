@@ -108,6 +108,12 @@ abstract class Sweeper
         if ($mtime !== false && (time() - $mtime) < $this->intervalSeconds) {
             return;
         }
+        // Remember whether the sentinel existed BEFORE the fopen below
+        // creates it. Without this, the very first sweep of a fresh
+        // deployment never ran: fopen('c') created the sentinel with
+        // mtime = now, and the in-lock re-check then read that fresh
+        // stamp as "someone just swept" and returned.
+        $sentinelExisted = ($mtime !== false);
 
         // Open and lock the sentinel. 'c' creates if missing without
         // truncating an existing file — important so the mtime survives
@@ -124,10 +130,17 @@ abstract class Sweeper
         try {
             // Re-check mtime inside the lock — another process may have
             // finished a sweep between our cheap check and our acquire.
-            clearstatcache(true, $this->sentinelPath);
-            $mtime = @filemtime($this->sentinelPath);
-            if ($mtime !== false && (time() - $mtime) < $this->intervalSeconds) {
-                return;
+            // Only meaningful when the sentinel predates our fopen: a
+            // just-created sentinel always looks fresh (see above). The
+            // residual race — two processes both see no sentinel, the
+            // first finishes before the second locks — makes the sweep
+            // run twice once; sweeps are idempotent, that's harmless.
+            if ($sentinelExisted) {
+                clearstatcache(true, $this->sentinelPath);
+                $mtime = @filemtime($this->sentinelPath);
+                if ($mtime !== false && (time() - $mtime) < $this->intervalSeconds) {
+                    return;
+                }
             }
             $this->sweep();
         } catch (\Throwable $e) {

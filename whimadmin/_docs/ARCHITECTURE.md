@@ -339,8 +339,14 @@ WhimAdmin **never writes to**:
 
 - `<core>/lib/`, `<core>/index.php`, `<core>/.htaccess`,
   `<core>/_htaccess_production`
-- `<core>/var/` (the public-site cache invalidates by mtime, which
-  WhimAdmin's `rename` naturally bumps)
+- `<core>/var/` (the public-site cache invalidates by mtime, and a saved
+  page carries a fresh one — `PageRepository::save()` writes a temp file
+  and renames it over the target, so the live file *is* the newly
+  written one. Note the mechanism: `rename()` does **not** bump an
+  mtime, it preserves the source's — see `Content\Recycler::recycle()`
+  for the correct statement. Reading it the other way round is what
+  broke the asset recycler's retention, where an existing file is moved
+  and keeps its original modification time.)
 - `<core>/<paths.theme>/` (template / styling work is dev-side)
 - Other `<core>/config/*.php` files (operator-managed via SFTP)
 

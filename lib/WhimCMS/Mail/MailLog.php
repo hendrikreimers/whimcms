@@ -24,9 +24,13 @@ use H42\WhimCMS\Log;
  * One file per send keeps writes contention-free under bursts and makes
  * day-bucketed retention a directory delete instead of a JSON edit.
  *
- * Retention is enforced opportunistically: every write also prunes
- * any day-folder older than `retentionDays`. The cost is one readdir
- * per send, which is fine.
+ * Retention is NOT enforced here. It used to run inline on every
+ * write, which froze the existing records forever the moment an
+ * operator set `log_enabled = false` — the pruner lived behind the
+ * writer's early return. Day buckets older than
+ * `mail.log_retention_days` are now removed by the kernel-wired
+ * `Maintenance\DayDirSweeper`, independent of whether this writer
+ * still runs.
  */
 final class MailLog
 {
@@ -35,7 +39,6 @@ final class MailLog
     public function __construct(
         string $stateDir,
         private bool $enabled,
-        private int $retentionDays,
         private bool $includeBody,
     ) {
         $this->dir = rtrim($stateDir, '/\\') . '/mail-log';
@@ -80,49 +83,6 @@ final class MailLog
             json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}'
         );
         @chmod($path, 0600);
-
-        $this->prune($now);
-    }
-
-    /**
-     * Drop day folders whose date is older than the retention window.
-     * Cheap: scandir of the parent + naive date compare.
-     */
-    private function prune(int $now): void
-    {
-        $cutoff = date('Y-m-d', $now - max(0, $this->retentionDays) * 86400);
-        $entries = @scandir($this->dir);
-        if ($entries === false) {
-            return;
-        }
-        foreach ($entries as $name) {
-            if ($name === '.' || $name === '..' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $name)) {
-                continue;
-            }
-            if ($name < $cutoff) {
-                $this->deleteDir($this->dir . '/' . $name);
-            }
-        }
-    }
-
-    private function deleteDir(string $dir): void
-    {
-        $entries = @scandir($dir);
-        if ($entries === false) {
-            return;
-        }
-        foreach ($entries as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir . '/' . $entry;
-            if (is_dir($path)) {
-                $this->deleteDir($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        @rmdir($dir);
     }
 
     private function ensureDir(): void

@@ -6,6 +6,7 @@ namespace H42\WhimAdmin\Auth;
 use H42\WhimAdmin\Audit\Log as AuditLog;
 use H42\WhimAdmin\View\Renderer;
 use H42\WhimCMS\Config as CoreConfig;
+use H42\WhimCMS\Io\FileRewrite;
 use H42\WhimCMS\Log as CoreLog;
 use H42\WhimCMS\Mail\Message;
 use H42\WhimCMS\Mail\PhpMailTransport;
@@ -155,7 +156,12 @@ final class OtpMailer
             return false;
         }
         try {
-            flock($fh, LOCK_EX);
+            // Unacquirable lock → no OTP mail (closed; see core Mailer).
+            if (!@flock($fh, LOCK_EX)) {
+                CoreLog::error('OtpMailer: cannot acquire counter lock; failing closed', ['path' => $path]);
+                $this->audit->record('login.otp.send.fail', $clientIp, $username, ['reason' => 'counter_lock']);
+                return false;
+            }
             rewind($fh);
             $raw = stream_get_contents($fh);
             $count = is_string($raw) ? (int)trim($raw) : 0;
@@ -164,10 +170,13 @@ final class OtpMailer
                 return false;
             }
             $count++;
-            ftruncate($fh, 0);
-            rewind($fh);
-            fwrite($fh, (string)$count);
-            fflush($fh);
+            // Verified rewrite (see core Mailer::underDailyCap for the
+            // full rationale): no persisted increment → no OTP mail.
+            if (!FileRewrite::replace($fh, (string)$count, is_string($raw) ? $raw : '')) {
+                CoreLog::error('OtpMailer: counter rewrite failed; failing closed', ['path' => $path]);
+                $this->audit->record('login.otp.send.fail', $clientIp, $username, ['reason' => 'counter_write']);
+                return false;
+            }
             return true;
         } finally {
             flock($fh, LOCK_UN);

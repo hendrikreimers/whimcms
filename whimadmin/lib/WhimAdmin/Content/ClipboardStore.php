@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimAdmin\Content;
 
+use H42\WhimCMS\Log as CoreLog;
+
 /**
  * Per-user block clipboard. Single block at a time (cut → paste).
  *
@@ -26,7 +28,19 @@ final class ClipboardStore
         $this->dir = rtrim($stateDir, '/\\') . '/clipboard';
     }
 
-    public function set(string $username, Block $block): void
+    /**
+     * Store one block. Returns false when the clipboard could NOT be
+     * written — the caller must then leave the document untouched.
+     *
+     * Was `void` until 2026-08-13 and returned silently on three
+     * separate failure paths (unencodable payload, failed write, failed
+     * rename). `PagesController::actCut` called it and removed the block
+     * regardless, so a failed clipboard write destroyed the block with
+     * no message: gone from the document, absent from the clipboard.
+     * Every neighbouring writer — HistoryStore, PageRepository, Recycler
+     * — throws on the same class of failure; this one swallowed.
+     */
+    public function set(string $username, Block $block): bool
     {
         $this->ensureDir();
         $payload = [
@@ -36,17 +50,22 @@ final class ClipboardStore
         ];
         $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if (!is_string($json)) {
-            return;
+            CoreLog::error('ClipboardStore: block is not encodable', ['type' => $block->type]);
+            return false;
         }
         $path = $this->pathFor($username);
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
         if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            return;
+            CoreLog::error('ClipboardStore: cannot write clipboard tempfile', ['path' => $path]);
+            return false;
         }
         @chmod($tmp, 0o600);
         if (!@rename($tmp, $path)) {
             @unlink($tmp);
+            CoreLog::error('ClipboardStore: cannot finalise clipboard file', ['path' => $path]);
+            return false;
         }
+        return true;
     }
 
     public function get(string $username): ?Block

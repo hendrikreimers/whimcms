@@ -23,12 +23,19 @@ use H42\WhimCMS\Template\Engine;
  *
  * Pipeline:
  *   1. Reject if the IP is already on the soft blocklist.
- *   2. Validate the CSRF/timing token. Failure → strike + reject.
- *   3. Rate-limit (5/10min default). Failure → reject (no strike).
+ *   2. Validate the CSRF/timing token. Failure → reject, NO strike —
+ *      the one gate that deliberately does not punish; step 2 in the
+ *      body says why.
+ *   3. Rate-limit. Failure → reject (no strike). `rate_limit` in
+ *      config/security.php: 20 per 10 min as shipped, 5 per 10 min as
+ *      the code fallback when the key is absent.
  *   4. Inspect honeypot. Filled → strike + pretend success (for bots).
- *   5. Run field validation. Errors → return rerender with errors.
- *   6. Build mail context + send recipient mail (and sender if enabled).
- *   7. Issue a 303-style redirect token to /<lang>/?sent=1#contact.
+ *   5. Proof-of-work captcha — missing (throttled via
+ *      CaptchaMissTracker), invalid, or replayed → strike + reject.
+ *      THREE of the four strike sites live in this step.
+ *   6. Run field validation. Errors → return rerender with errors.
+ *   7. Build mail context, send recipient mail (plus sender
+ *      confirmation if enabled), redirect to /<lang>/…?sent=1#contact.
  *
  * Output shape:
  *   ['action' => 'redirect',  'url' => '...']
@@ -96,9 +103,37 @@ final class ContactController
         // it was issued under AND the same form scope (FORM_ID), so a
         // token harvested from one network or issued for a different
         // form cannot be replayed here.
+        //
+        // NO Blocklist strike here, deliberately — do not "restore" it.
+        // This is the only gate reachable WITHOUT a valid token, which
+        // made it the one an outsider could aim at a third party: six
+        // silent POSTs — from a foreign page via the visitor's browser,
+        // or by anyone sharing the visitor's egress address (CGNAT,
+        // VPN, Tor exit) — bought that visitor a 15-minute block.
+        //
+        // It also punished the innocent majority. A failed token means
+        // expired (max_age 7200 s), submitted under min_age, or a
+        // changed IP — and with bind_strategy 'ip_ua' the token binds
+        // the FULL address while the strike counts on the /64, so one
+        // roaming mobile visitor burnt strikes for their whole
+        // connection. contact-form.js re-arms and retries once per
+        // click, i.e. up to two strikes per click. The client-side
+        // design already treats this as a recoverable, ordinary event;
+        // the strike treated it as an attack.
+        //
+        // Striking here bought nothing in return. A blocked client takes
+        // the SAME response path as a rejected one (see isBlocked above):
+        // a full page re-render on the form-encoded path, a 422 JSON body
+        // on the fetch path. The block never made the answer cheaper —
+        // it swapped the echoed input for an empty one and the error
+        // code for 'blocked'. No mail and
+        // no state write hung on it either, and the rate limiter below is
+        // never reached on this path anyway. The four strike sites
+        // further down all sit behind a PASSED token check — they
+        // identify a client that held a token issued to itself — and
+        // they stay.
         $token = is_string($post['_token'] ?? null) ? (string)$post['_token'] : '';
         if (!Csrf::validate($token, $this->secret, $bindKey, self::FORM_ID, $this->csrfMinAge, $this->csrfMaxAge)) {
-            $this->blocklist->strike($clientIp);
             Log::info('Contact: invalid token', []);
             return [
                 'action' => 'rerender',
@@ -179,10 +214,20 @@ final class ContactController
                 ];
             }
             // Single-use enforcement: mark the (token, nonce) pair as
-            // consumed. A repeat within max_age = replay attempt → strike.
-            if (!$this->captchaStore->consume($cToken, $cNonce)) {
-                $this->blocklist->strike($clientIp);
-                Log::info('Contact: captcha replay', []);
+            // consumed. Positive guard on purpose — EVERY non-CONSUMED
+            // verdict refuses, so a state added to CaptchaStore later
+            // cannot fall through as "passed". Only a genuine replay is
+            // also punished: when the store simply could not write
+            // (quota, read-only mount, fd limit) the fault is ours, and
+            // striking the visitor for it is the posture the sibling
+            // CaptchaMissTracker explicitly rejects. The store has
+            // already logged path and errno in that case.
+            $captchaState = $this->captchaStore->consume($cToken, $cNonce);
+            if ($captchaState !== CaptchaStore::CONSUMED) {
+                if ($captchaState === CaptchaStore::REPLAY) {
+                    $this->blocklist->strike($clientIp);
+                    Log::info('Contact: captcha replay', []);
+                }
                 return [
                     'action' => 'rerender',
                     'errors' => [],
@@ -232,26 +277,54 @@ final class ContactController
         return ['action' => 'redirect', 'url' => $successUrl];
     }
 
-    /** HMAC-hash for the IP so the mail log never contains plaintext. */
+    /**
+     * HMAC-hash for the IP so the mail log never contains plaintext.
+     *
+     * **Deliberately not `Security\ThrottleKey::derive()`**, and this is
+     * not an oversight to be tidied away: that helper reduces an IPv6
+     * client to its /64 network, which is right for a counter and wrong
+     * here. A throttle asks "which connection is this?", an audit entry
+     * asks "which device was this?" — the mail log exists to answer the
+     * second question, so it keeps the full address.
+     *
+     * The 16 hex characters (vs. 32 in the throttling stores) are only a
+     * size cap on the log file; they are the prefix of the same digest,
+     * not a different scheme.
+     */
     private function hashIp(string $ip): string
     {
         return substr(hash_hmac('sha256', $ip, $this->secret), 0, 16);
     }
 
     /**
-     * Pull only string-shaped fields out of $_POST so a re-render of the
-     * form doesn't echo unexpected types. Hard-cap length per field.
+     * Values echoed back into the form when a submission is rejected
+     * BEFORE the validator runs (bad token, rate limit, captcha), so the
+     * visitor doesn't lose what they typed. Hard-cap length per field.
+     *
+     * Driven by the schema, not by the request: only fields the
+     * validator knows are kept, everything else a client sent is
+     * dropped. `_token`, `_captcha_token`, `_captcha_nonce` and the
+     * honeypot need no explicit exclusion — they are not form fields, so
+     * they are not in the schema.
+     *
+     * Until 2026-08-13 this kept EVERY string key in $_POST. That was
+     * harmless only because the template addresses fields by name; a
+     * later loop over FORM_VALUES would have turned it into a
+     * reflection surface for arbitrary attacker-supplied keys. It also
+     * disagreed with the validation path, which has always returned
+     * exactly the configured fields (Validator::validate) — the two
+     * re-render paths now produce the same shape.
      *
      * @param array<string, mixed> $post
      * @return array<string, string>
      */
     private function keepValues(array $post): array
     {
-        $reserved = ['_token', '_captcha_token', '_captcha_nonce', $this->honeypotField];
         $out = [];
-        foreach ($post as $k => $v) {
-            if (is_string($k) && is_string($v) && !in_array($k, $reserved, true)) {
-                $out[$k] = mb_substr($v, 0, 5000, 'UTF-8');
+        foreach ($this->validator->fieldNames() as $field) {
+            $v = $post[$field] ?? null;
+            if (is_string($v)) {
+                $out[$field] = mb_substr($v, 0, 5000, 'UTF-8');
             }
         }
         return $out;
@@ -271,22 +344,23 @@ final class ContactController
             $stateDir,
             $secret,
             (int)($config['rate_limit']['window_seconds'] ?? 600),
-            (int)($config['rate_limit']['max_per_window'] ?? 5),
+            (int)($config['rate_limit']['max_per_window'] ?? 20),
         );
         $blocklist = new Blocklist(
             $stateDir,
             $secret,
-            (int)($config['blocklist']['fail_threshold'] ?? 3),
+            (int)($config['blocklist']['fail_threshold'] ?? 6),
             (int)($config['blocklist']['fail_window'] ?? 1800),
-            (int)($config['blocklist']['block_duration'] ?? 1800),
+            (int)($config['blocklist']['block_duration'] ?? 900),
         );
         $validator = new Validator(
             (array)($config['contact']['fields'] ?? [])
         );
+        // Retention (mail.log_retention_days) is no longer a MailLog
+        // concern — the Kernel wires a Maintenance\DayDirSweeper for it.
         $mailLog = new MailLog(
             $stateDir,
             (bool)($config['mail']['log_enabled'] ?? true),
-            (int)($config['mail']['log_retention_days'] ?? 30),
             (bool)($config['mail']['log_include_body'] ?? false),
         );
         $mailer = new Mailer(
@@ -296,10 +370,9 @@ final class ContactController
             $stateDir,
             (array)($config['mail'] ?? []),
         );
-        $captchaStore = new CaptchaStore(
-            $stateDir,
-            (int)($config['captcha']['max_age'] ?? 600),
-        );
+        // captcha.max_age now only parameterises the TtlFileSweeper the
+        // Kernel wires for captcha-used/ — the store itself no longer prunes.
+        $captchaStore = new CaptchaStore($stateDir);
         $captchaMissTracker = new CaptchaMissTracker(
             $stateDir,
             $secret,
@@ -325,9 +398,9 @@ final class ContactController
             $secret,
             $honeypotField,
             (int)($config['csrf']['min_age_seconds'] ?? 3),
-            (int)($config['csrf']['max_age_seconds'] ?? 3600),
-            (bool)($config['captcha']['enabled'] ?? false),
-            (int)($config['captcha']['max_age'] ?? 600),
+            (int)($config['csrf']['max_age_seconds'] ?? 7200),
+            (bool)($config['captcha']['enabled'] ?? true),
+            (int)($config['captcha']['max_age'] ?? 7200),
         );
     }
 }

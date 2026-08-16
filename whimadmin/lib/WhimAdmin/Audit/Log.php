@@ -209,6 +209,12 @@ final class Log
     {
         // 16 hex chars (64 bits) is plenty for aggregation/correlation
         // without making the log file enormous.
+        //
+        // Deliberately NOT H42\WhimCMS\Security\ThrottleKey::derive(),
+        // even though the login throttle on the same request uses it:
+        // that helper folds an IPv6 client onto its /64 network, which
+        // is right for a counter ("which connection?") and wrong for an
+        // audit trail ("which device?"). Keep the full address here.
         return substr(hash_hmac('sha256', $ip, $this->secret), 0, 16);
     }
 

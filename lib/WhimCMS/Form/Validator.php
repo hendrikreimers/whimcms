@@ -15,7 +15,10 @@ namespace H42\WhimCMS\Form;
  *   min        int    minimum length (text/textarea)
  *   max        int    maximum length / hard trim cap
  *   pattern    str    optional regex (PHP, including delimiters)
- *   allowed    list   for type='select': whitelist of allowed values
+ *   allowed    list   for type='select': whitelist of allowed values.
+ *                     MANDATORY for a select — an empty or missing list
+ *                     rejects every chosen value rather than accepting
+ *                     any (see validateSelect).
  *   multiline  bool   text fields only — true = preserve \n / \t
  *                     (textarea-style); false (default) = collapse
  *                     them to spaces. Set true for multi-line fields
@@ -42,6 +45,21 @@ final class Validator
      */
     public function __construct(private array $rules)
     {
+    }
+
+    /**
+     * The field names this validator knows, in config order.
+     *
+     * Exposed so a caller can align its own idea of "which fields exist"
+     * with the schema instead of keeping a second list that drifts.
+     * `ContactController::keepValues()` uses it to bound what an early
+     * rejection echoes back into the form.
+     *
+     * @return list<string>
+     */
+    public function fieldNames(): array
+    {
+        return array_values(array_filter(array_keys($this->rules), 'is_string'));
     }
 
     /**
@@ -111,7 +129,33 @@ final class Validator
         // Normalise newlines first so width calculations are stable.
         $value = str_replace(["\r\n", "\r"], "\n", $value);
         // Strip null + most control chars (keep \t \n).
-        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value) ?? $value;
+        $stripped = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value);
+        if ($stripped === null) {
+            // Invalid UTF-8: the /u pass bails out, and the old
+            // `?? $value` then kept the RAW string — control characters
+            // and NUL included, i.e. precisely what this line exists to
+            // remove. Repeat the strip byte-wise: every target byte is
+            // below 0x80 and can therefore never be a UTF-8
+            // continuation byte, so the pattern is safe without /u and
+            // cannot fail.
+            $stripped = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value) ?? $value;
+            // Then repair the malformed sequences themselves. Not
+            // cosmetic: a single raw 0xFF in a message used to survive
+            // to MailLog, where json_encode returns false and the `?:`
+            // fallback writes the audit entry as a literal `{}` — the
+            // mail goes out, the record is empty, nothing is logged.
+            // NOTE: this SUBSTITUTES bad sequences (default '?', see
+            // mbstring.substitute_character), it does not drop them.
+            // Either setting yields valid UTF-8, which is what the rest
+            // of the pipeline (Normalizer, mb_substr, json_encode)
+            // needs. Guarded like the Normalizer call below because
+            // mb_convert_encoding is string|false on this version.
+            $repaired = mb_convert_encoding($stripped, 'UTF-8', 'UTF-8');
+            if (is_string($repaired)) {
+                $stripped = $repaired;
+            }
+        }
+        $value = $stripped;
         // Single-line fields: collapse remaining \n / \t to spaces.
         // Defence against the case where a future code path drops a
         // single-line value into a mail header / log line / similar
@@ -194,9 +238,20 @@ final class Validator
     private function validateSelect(string $clean, array $rule): ?string
     {
         $allowed = (array)($rule['allowed'] ?? []);
-        if ($allowed === [] || in_array($clean, $allowed, true)) {
-            return null;
+        // An empty allow-list used to accept ANY value — the exact
+        // opposite of what a closed value set means, and of what this
+        // class's docblock promises. A select without a list is a
+        // misconfiguration; rejecting surfaces it on the first
+        // submission instead of silently accepting arbitrary input for
+        // the lifetime of the deployment. photoshare's validator has
+        // always refused here; this removes the divergence.
+        //
+        // No live form changes: an OPTIONAL select left empty never
+        // reaches this method (empty optional fields are skipped in
+        // validate()), so only a chosen value with no list is refused.
+        if ($allowed === []) {
+            return 'invalid_choice';
         }
-        return 'invalid_choice';
+        return in_array($clean, $allowed, true) ? null : 'invalid_choice';
     }
 }

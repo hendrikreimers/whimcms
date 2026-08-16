@@ -169,7 +169,7 @@ final class I18n
         if (self::$overlayDir !== null) {
             $allowed = (array)Config::get(
                 'i18n_overlay.allowed_sections',
-                ['nav', 'footer']
+                ['navigation']
             );
             $overlay = I18nOverlay::load($lang, self::$overlayDir, $allowed);
             if ($overlay !== null) {

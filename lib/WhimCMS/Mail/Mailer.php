@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS\Mail;
 
+use H42\WhimCMS\Io\FileRewrite;
 use H42\WhimCMS\Log;
 use H42\WhimCMS\Template\Engine;
 
@@ -148,9 +149,12 @@ final class Mailer
      */
     private function underDailyCap(): bool
     {
-        $cap = (int)($this->config['daily_max'] ?? 0);
+        $cap = (int)($this->config['daily_max'] ?? 200);
         if ($cap <= 0) {
-            // Cap not configured → no limit applies; allow.
+            // Cap EXPLICITLY disabled (`daily_max => 0` or negative) →
+            // no limit applies; allow. A *missing* key no longer lands
+            // here: it falls back to the shipped 200 instead of
+            // silently removing the backstop.
             return true;
         }
         $dir = rtrim($this->stateDir, '/\\') . '/mail-counter';
@@ -172,7 +176,13 @@ final class Mailer
             return false;
         }
         try {
-            flock($fh, LOCK_EX);
+            // Unacquirable lock → no mail (closed posture, like every
+            // other error in this method): an unprotected RMW could
+            // let parallel sends slip past the daily cap.
+            if (!flock($fh, LOCK_EX)) {
+                Log::error('Mailer: cannot acquire counter lock; failing closed (no mail sent)', ['path' => $path]);
+                return false;
+            }
             rewind($fh);
             $raw = stream_get_contents($fh);
             $count = is_string($raw) ? (int)trim($raw) : 0;
@@ -181,10 +191,15 @@ final class Mailer
                 return false;
             }
             $count++;
-            ftruncate($fh, 0);
-            rewind($fh);
-            fwrite($fh, (string)$count);
-            fflush($fh);
+            // Verified rewrite: the old truncate-first sequence let a
+            // full disk reset the day counter to zero — an attacker
+            // exhausting the write surface un-capped the mail flood.
+            // No persisted increment → no mail (fail closed, same as
+            // every other error in this method).
+            if (!FileRewrite::replace($fh, (string)$count, $raw === false ? '' : $raw)) {
+                Log::error('Mailer: counter rewrite failed; failing closed (no mail sent)', ['path' => $path]);
+                return false;
+            }
             return true;
         } finally {
             flock($fh, LOCK_UN);

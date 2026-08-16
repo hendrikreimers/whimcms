@@ -72,7 +72,6 @@ final class PageLoader
     private string $contentRealDir;
     private string $cacheDir;
     private BlockRegistry $registry;
-    private ?CacheSweeper $sweeper;
 
     // Identifier + structural patterns are sourced from Identifiers
     // (single source of truth, shared with the admin-side parsers).
@@ -144,7 +143,6 @@ final class PageLoader
         string $secret,
         int $maxBytes = 262144,
         array $allowedLayouts = ['default'],
-        ?CacheSweeper $sweeper = null,
     ) {
         $real = realpath($contentDir);
         $this->contentDir     = rtrim($contentDir, '/\\');
@@ -157,7 +155,6 @@ final class PageLoader
         if ($this->allowedLayouts === []) {
             $this->allowedLayouts = ['default'];
         }
-        $this->sweeper = $sweeper;
     }
 
     /**
@@ -231,10 +228,10 @@ final class PageLoader
         $page = $this->parseAndRender($src, $langRoot, $basePath);
         $writeOk = $this->writeCache($cachePath, $page, $mtime, $real);
         $this->lastStatus = $writeOk ? 'miss' : 'write-failed';
-        // Best-effort cache cleanup — runs at most once per configured
-        // interval (sentinel-gated inside the sweeper). Triggered only
-        // on cache-miss writes so cache hits stay fast.
-        $this->sweeper?->sweepIfDue();
+        // Cache cleanup is no longer triggered here. Coupling it to the
+        // cache-miss write meant a warm cache never swept at all; the
+        // kernel-wired Maintenance\Coordinator now runs the CacheSweeper
+        // at end of request, unconditionally and sentinel-gated.
         return $page;
     }
 

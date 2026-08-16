@@ -293,7 +293,7 @@ items:
     image: /assets/images/sample.jpg
     imageAlt: Sample shoot
     ctaLabel: Book a session
-    ctaHref: '#contact'
+    ctaHref: #contact
 :::
 ```
 
@@ -323,7 +323,7 @@ items:
       - 5 active workspaces
       - Email support
     ctaLabel: Start free trial
-    ctaHref: '#contact'
+    ctaHref: #contact
   - name: Team
     price: $79
     period: per seat / month
@@ -332,7 +332,7 @@ items:
       - 25 active workspaces
       - SSO and audit log
     ctaLabel: Start free trial
-    ctaHref: '#contact'
+    ctaHref: #contact
 :::
 ```
 
@@ -442,7 +442,7 @@ title: Pick a theme. Make it yours.
 body: Each demo is one layout file plus one stylesheet plus a markdown page.
 cta:
   label: See bundled themes
-  href: '#themes'
+  href: #themes
 :::
 ```
 

@@ -315,7 +315,9 @@ it in a separate pass and produces no output token.
 {% for: list, as: 'item' %}…{% endfor %}            loop (`as:` is mandatory)
 {% for: list, as: 'item', include: 'partials/x' %}  inline-include loop
 {% blocks %}                 render the page's block stream
-{% html: body %}             verbatim — only for Markdown-rendered bodies
+{% html: body %}             verbatim — Markdown bodies + SEO.ldJson only
+                             (never `{!! !!}` for JSON-LD: that escapes
+                              the JSON quotes and silently breaks it)
 {% image: '<path>', width: N, height: N, focusX: F?, focusY: F? %}
                              crop-to-fit — exact NxN with optional focus
 {% image: '<path>', maxWidth: N?, maxHeight: N? %}

@@ -16,8 +16,25 @@ use H42\WhimCMS\Log as CoreLog;
  *                 "issued":     <ts>,
  *                 "last":       <ts>,
  *                 "bind_key":   "<hex>",   # binds to ip+ua at issue time
- *                 "csrf_seed":  "<hex>",   # tied to the session for token issue
+ *                 "csrf_seed":  "<hex>",   # UNUSED — see note below
  *               }
+ *
+ * ⚠️ `csrf_seed` is written, parsed and carried in the type signatures,
+ * but NOTHING consumes it. Http\Csrf takes only (secret, clientIp,
+ * userAgent) and derives its bind key from ip+ua alone, so an admin CSRF
+ * token is NOT session-scoped: it stays valid for its full 8 h lifetime
+ * across a logout. This field was previously documented as "tied to the
+ * session for token issue", which is untrue.
+ *
+ * Left in place rather than wired up, deliberately. Wiring it would need
+ * a null-seed branch for three of the six form ids: Kernel::dispatch
+ * constructs the Csrf object BEFORE loading the session, the login form
+ * issues its token when no session exists yet, and the first-run setup
+ * path has neither user nor session. The gain would be "token dies at
+ * logout"; the attacker it would stop already needs a valid session
+ * cookie, at which point they are the admin. Removing the field is the
+ * other honest option and is a bigger change than it looks (two type
+ * signatures plus Kernel).
  *
  * Two-stage session:
  *   - `pre-otp`: created at successful password step. The user has NOT
@@ -35,8 +52,14 @@ use H42\WhimCMS\Log as CoreLog;
  *
  * Session ID rotation:
  *   - On stage upgrade (pre-otp → authed)            → new id, anti-fixation.
- *   - On logout                                       → file deleted, cookie cleared.
- *   - On idle/absolute timeout or bind mismatch      → file deleted, cookie cleared.
+ *   - On logout                                       → file deleted; the
+ *     cookie is cleared by LogoutController, not here.
+ *   - On idle/absolute timeout or bind mismatch      → **only** the server-side
+ *     file is deleted and load() returns null. This class has no dependency
+ *     on the cookie or the response layer and clears nothing; the stale
+ *     cookie stays in the browser until the next login overwrites it.
+ *     Harmless — the id it names no longer resolves — but the previous
+ *     wording ("cookie cleared") described something this class cannot do.
  */
 final class Session
 {
@@ -259,8 +282,14 @@ final class Session
             throw new \RuntimeException('Session encode failed.');
         }
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
-        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            CoreLog::lastPhpError('Session tempfile write failed', ['tmp' => $tmp]);
+        // file_put_contents returns the BYTE COUNT — `=== false` alone
+        // misses a short write on a full disk, and rename() would then
+        // promote truncated JSON to the live record (silently killing
+        // the session). Verify the count and remove the fragment.
+        $written = @file_put_contents($tmp, $json, LOCK_EX);
+        if ($written === false || $written !== strlen($json)) {
+            CoreLog::lastPhpError('Session tempfile write failed or short', ['tmp' => $tmp]);
+            @unlink($tmp);
             throw new \RuntimeException('Cannot write session (tempfile).');
         }
         @chmod($tmp, 0o600);

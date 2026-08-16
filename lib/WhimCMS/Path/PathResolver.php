@@ -87,6 +87,15 @@ final class PathResolver
      *
      * The caller (Kernel) installs the result via `Log::setFile()` —
      * keeps PathResolver from depending on Log.
+     *
+     * Containment: the returned path's PARENT directory is verified to
+     * resolve inside paths.var, so `Log::setFile`'s docblock promise
+     * ("resolved it under paths.var") is one the code actually keeps.
+     * Known boundary, deliberately not covered: if the log file itself
+     * already exists as a symlink pointing outside, appending follows
+     * it. That needs local write access to paths.var — and anyone with
+     * that already holds the application secret stored there, so the
+     * symlink is not the interesting attack.
      */
     public function resolveOptionalLogFile(string $varAbsPath): ?string
     {
@@ -104,6 +113,48 @@ final class PathResolver
         if (!is_dir($dir)) {
             @mkdir($dir, 0700, true);
         }
+
+        // Containment, not decoration. isValidRelativePath() above rejects
+        // `..`, a leading `/` and control characters — but it inspects a
+        // STRING and cannot see a symlink inside paths.var. Without this
+        // step a symlinked sub-directory would place the log outside the
+        // state tree while the docblock kept promising otherwise.
+        //
+        // Same shape as realpathContain() below, INCLUDING the equality
+        // branch — that one is load-bearing here: with a bare filename
+        // (`log_file => 'whimcms.log'`) the parent IS paths.var, and a
+        // str_starts_with test on its own would reject the most ordinary
+        // configuration there is.
+        //
+        // Judged only when BOTH sides resolve — "resolve", not "is a
+        // directory": realpath() resolves a regular file too, and if the
+        // parent happens to be one the check simply runs on it and
+        // passes, with the write failing harmlessly later.
+        //
+        // A parent that does not resolve means the mkdir above failed —
+        // full disk, read-only var/, quota. Then there is nothing to
+        // contain: an environment fault, not a misconfiguration, and it
+        // must NOT throw. This method runs during bootstrap of EVERY
+        // request, so a throw takes the whole installation down, while
+        // Log::setFile suppresses write failures by design — the site
+        // keeps serving and only the file mirror is lost. A wrong config
+        // is loud, a full disk is not fatal.
+        //
+        // $varAbsPath failing to resolve is the second fail-open. It is
+        // unreachable today (the Kernel passes paths['var'] only after
+        // realpathContain() has resolved it) and is guarded anyway so
+        // this helper stays correct for a future caller that does not.
+        $realDir = realpath($dir);
+        $realVar = realpath($varAbsPath);
+        if ($realDir !== false && $realVar !== false
+            && $realDir !== $realVar
+            && !str_starts_with($realDir, $realVar . DIRECTORY_SEPARATOR)
+        ) {
+            throw new \RuntimeException(
+                "log_file resolves outside paths.var: '{$logFile}'"
+            );
+        }
+
         return $abs;
     }
 

@@ -5,7 +5,6 @@ namespace H42\WhimCMS\Template\Directives;
 
 use H42\WhimCMS\Config;
 use H42\WhimCMS\Image\CroppedCache;
-use H42\WhimCMS\Image\CroppedCacheSweeper;
 use H42\WhimCMS\Image\CroppingProcessor;
 use H42\WhimCMS\Image\Driver\GdDriver;
 use H42\WhimCMS\Log;
@@ -115,8 +114,6 @@ final class ImageDirective implements Directive
     private ?AssetPathResolver $assetPaths = null;
     private ?CroppedCache $cache = null;
     private ?CroppingProcessor $processor = null;
-    private ?CroppedCacheSweeper $sweeper = null;
-    private ?string $basePath = null;
     private string $fallbackWhenNoGd = 'serve_fail';
     private int $maxSourceBytes = self::DEFAULT_MAX_SOURCE_BYTES;
     private int $maxSourcePixels = self::DEFAULT_MAX_SOURCE_PIXELS;
@@ -281,13 +278,14 @@ final class ImageDirective implements Directive
             return $basePath . $assetPath;
         }
 
-        // Rendered. Store in cache, trigger sweep on a write, return URL.
+        // Rendered. Store in cache, return URL. Cache retention is the
+        // kernel-wired Maintenance\Coordinator's job (CroppedCacheSweeper
+        // runs at end of request) — no sweep trigger in the render path.
         $stored = $services['cache']->store($filename, $result['bytes']);
         if (!$stored) {
             Log::error('ImageDirective: cache write failed', ['path' => $assetPath, 'filename' => $filename]);
             return '';
         }
-        $services['sweeper']?->sweepIfDue();
         return $basePath . '/img-c/' . $filename;
     }
 
@@ -441,7 +439,7 @@ final class ImageDirective implements Directive
      * to crash the engine at boot just because a host happens to use
      * the engine without image support.
      *
-     * @return array{assetPaths:AssetPathResolver, cache:CroppedCache, processor:CroppingProcessor, sweeper:?CroppedCacheSweeper}|null
+     * @return array{assetPaths:AssetPathResolver, cache:CroppedCache, processor:CroppingProcessor}|null
      */
     private function ensureServices(): ?array
     {
@@ -450,7 +448,6 @@ final class ImageDirective implements Directive
                 'assetPaths' => $this->assetPaths,
                 'cache'      => $this->cache,
                 'processor'  => $this->processor,
-                'sweeper'    => $this->sweeper,
             ];
         }
 
@@ -495,27 +492,19 @@ final class ImageDirective implements Directive
         $this->fallbackWhenNoGd = $fallback === 'serve_original' ? 'serve_original' : 'serve_fail';
 
         $cacheDir = $varDir . '/cache/img-cropped';
-        $stateDir = $varDir . '/state';
 
         $this->assetPaths = new AssetPathResolver($rootDir, $assetRoots);
         $this->cache      = new CroppedCache($cacheDir);
         $this->processor  = new CroppingProcessor(new GdDriver($jpegQuality));
 
-        $sweepInterval = (int)($images['cropped_cache_sweep_interval'] ?? 86400);
-        $maxAge        = (int)($images['cropped_cache_max_age']        ?? 30 * 86400);
-        $this->sweeper = new CroppedCacheSweeper(
-            $cacheDir,
-            $stateDir . '/.cache-sweep-img-cropped',
-            $sweepInterval,
-            $rootDir,
-            $maxAge,
-        );
+        // The CroppedCacheSweeper used to be built + triggered here,
+        // which tied cache retention to "a page with images rendered".
+        // The Kernel now owns it via the Maintenance\Coordinator.
 
         return [
             'assetPaths' => $this->assetPaths,
             'cache'      => $this->cache,
             'processor'  => $this->processor,
-            'sweeper'    => $this->sweeper,
         ];
     }
 }

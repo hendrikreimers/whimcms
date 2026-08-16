@@ -8,6 +8,15 @@
 
   {% if: !SEO.indexable %}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />{% endif %}
 
+  {# The page-descriptive tags below are suppressed on the error page.
+     PageRenderer::renderNotFound renders this layout with the home
+     slug, so without this gate every 404 would claim the homepage as
+     its canonical (inviting soft-404 consolidation) and ship a social
+     card combining the error title with the homepage URL. An error
+     page describes nothing, so it describes nothing about itself.
+     The robots meta above stays OUTSIDE the gate on purpose: a
+     non-indexable install must keep its 404 out of the index too. #}
+  {% if: PAGE != '_error' %}
   <link rel="canonical" href="{{ SEO.canonical }}" />
   {% for: SEO.alternates, as: 'alt' %}
   <link rel="alternate" hreflang="{{ alt.lang }}" href="{{ alt.url }}" />
@@ -26,6 +35,8 @@
   <meta name="twitter:description" content="{{ META.description }}" />
   {% if: SEO.ogImage %}<meta name="twitter:image" content="{{ SEO.ogImage }}" />{% endif %}
 
+  {% endif %}
+
   <link rel="icon" type="image/svg+xml" href="{{ BASE }}{{ THEME_URL }}/assets/favicon.svg" />
   <meta name="color-scheme" content="dark" />
 
@@ -38,7 +49,7 @@
 
   <script type="module" src="{{ BASE }}{{ THEME_URL }}/js/main.js?v={{ CACHE_BUSTER }}"></script>
 
-  <script type="application/ld+json">{!! SEO.ldJson !!}</script>
+  {% if: PAGE != '_error' %}<script type="application/ld+json">{% html: SEO.ldJson %}</script>{% endif %}
 </head>
 <body class="theme theme-dev" data-page="{{ PAGE }}">
   <a class="skip-link" href="#main">{{ CURRENT_LANG.a11y.skipLink }}</a>

@@ -218,8 +218,13 @@ final class OtpStore
             throw new \RuntimeException('OTP record encode failed.');
         }
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
-        if (@file_put_contents($tmp, $json, LOCK_EX) === false) {
-            CoreLog::lastPhpError('OTP tempfile write failed', ['tmp' => $tmp]);
+        // Byte-count check — `=== false` alone misses a short write on
+        // a full disk; rename() would promote truncated JSON. Same fix
+        // as Session::writeAtomic.
+        $written = @file_put_contents($tmp, $json, LOCK_EX);
+        if ($written === false || $written !== strlen($json)) {
+            CoreLog::lastPhpError('OTP tempfile write failed or short', ['tmp' => $tmp]);
+            @unlink($tmp);
             throw new \RuntimeException('Cannot write OTP record (tempfile).');
         }
         @chmod($tmp, 0o600);

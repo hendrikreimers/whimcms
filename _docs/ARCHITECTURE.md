@@ -126,7 +126,9 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
     Security/             site-hardening primitives — every class here is
                           security-relevant
       Secret.php          HMAC secret, lazy-init on first hit
-      RateLimiter.php     sliding-window per IP-hash (request-level)
+      ThrottleKey.php     bucket key shared by the three throttling stores;
+                          normalises IPv6 to its /64 network before hashing
+      RateLimiter.php     sliding-window per network-hash (request-level)
       Blocklist.php       soft strikes-and-block list (request-level)
       EmailProtection.php address obfuscation for HTML output
       Form/               form-submission defences — anything that gates
@@ -140,8 +142,10 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
         Captcha/
           Captcha.php     proof-of-work challenge (128-bit salt)
           CaptchaStore.php  single-use replay protection
-          CaptchaMissTracker.php  per-IP throttle for empty-captcha submits;
-                          escalates to a Blocklist strike on threshold
+          CaptchaMissTracker.php  per-network throttle for empty-captcha
+                          submits; escalates to a Blocklist strike on
+                          threshold (shares ThrottleKey with it, so both
+                          agree on which client a strike belongs to)
       Http/
         RequestSecurity.php static helpers for inbound-request safety:
                           rejectUnsafeRequest (NUL/CR/LF in REQUEST_URI/
@@ -159,7 +163,9 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
     Mail/                 transport-agnostic mailer
       Message.php Mailer.php Transport.php
       PhpMailTransport.php  default: PHP's mail()
-      MailLog.php           audit log with TTL (off by default)
+      MailLog.php           audit log, gated by mail.log_enabled;
+                            retention runs in Maintenance/DayDirSweeper,
+                            not here
     Image/                server-side cropped/resized image generator,
                           driven entirely by the `{% image %}` directive
                           (no client-driven cache writes — the URL space
@@ -183,6 +189,14 @@ lib/                      PSR-4 autoloaded under namespace H42\WhimCMS\
     Cache/                shared abstract base for cache sweepers
       Sweeper.php           sentinel-gated, lock-protected, root-confined,
                             lstat-based symlink/type rejection
+    Maintenance/          retention for the var/ state stores, all built
+                          on Cache/Sweeper's audited guarantees
+      Coordinator.php       one shutdown-hook trigger per kernel; hands
+                            the response off first under FPM
+      TtlFileSweeper.php    flat store, filename allowlist, mtime TTL,
+                            capped deletions per run
+      DayDirSweeper.php     YYYY-MM-DD buckets older than retention
+                            (mail-log; decoupled from log_enabled)
     Seo/                  canonical / robots / sitemap / llms.txt / per-page SEO
       Origin.php Robots.php Sitemap.php LlmsTxt.php PageSeo.php
 

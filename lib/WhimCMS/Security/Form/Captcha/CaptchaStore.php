@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS\Security\Form\Captcha;
 
+use H42\WhimCMS\Log;
+
 /**
  * Single-use store for solved captcha challenges.
  *
@@ -13,38 +15,60 @@ namespace H42\WhimCMS\Security\Form\Captcha;
  *
  * Storage layout:
  *   var/state/captcha-used/<sha256(token||nonce)[0..32]>
- *   var/state/captcha-used/.last-prune
  *
  * One file per accepted pair; file contents are the unix timestamp of
- * acceptance (used for retention pruning). Auto-cleanup runs at most
- * once per minute (or per `max_age` if shorter) — opportunistic rather
- * than via cron so a fresh deployment needs no extra wiring.
+ * acceptance. Retention is handled by the kernel-wired
+ * `Maintenance\TtlFileSweeper` (TTL = captcha.max_age + margin) — the
+ * previous in-writer prune pass and its `.last-prune` marker are gone;
+ * a leftover marker file from an older deployment is inert and outside
+ * the sweeper's filename allowlist.
+ *
+ * Replay-safety does NOT depend on retention: a marker only has to
+ * exist for the `max_age` window in which its token is still
+ * signature-valid. Keeping it longer is harmless; deleting it before
+ * expiry is what the sweeper's TTL margin rules out.
  *
  * Race-safety: `fopen($path, 'x')` is O_EXCL on POSIX — atomic
  * create-only. A second process trying to consume the same pair gets
- * `false` from fopen, which we treat as replay.
+ * `false` from fopen — but so does a process that simply cannot write
+ * (quota, fd limit, read-only mount). The two are told apart before a
+ * verdict is returned; see consume().
  */
 final class CaptchaStore
 {
-    private string $dir;
-    private int $maxAge;
+    /** First sighting of this (token, nonce) — the caller may proceed. */
+    public const CONSUMED = 'consumed';
 
-    public function __construct(string $stateDir, int $maxAge)
+    /** The marker already exists — a genuine reuse of a solved captcha. */
+    public const REPLAY = 'replay';
+
+    /** The marker could not be written. Refuse, but do not punish. */
+    public const UNAVAILABLE = 'unavailable';
+
+    private string $dir;
+
+    public function __construct(string $stateDir)
     {
-        $this->dir    = rtrim($stateDir, '/\\') . '/captcha-used';
-        $this->maxAge = max(1, $maxAge);
+        $this->dir = rtrim($stateDir, '/\\') . '/captcha-used';
     }
 
     /**
-     * Mark a (token, nonce) pair as consumed. Returns true if this is
-     * the first time we see the pair (caller may proceed), false if
-     * the pair has already been used (caller should reject as replay).
+     * Mark a (token, nonce) pair as consumed. Returns CONSUMED, REPLAY
+     * or UNAVAILABLE — this method reports what happened, the caller
+     * decides what it costs.
+     *
+     * It used to return bool, which made REPLAY and UNAVAILABLE
+     * indistinguishable: a state directory that had gone unwritable
+     * looked exactly like a replay, and the contact pipeline answered
+     * both with a Blocklist strike. The site then punished its own
+     * visitors for its own disk. Every non-CONSUMED verdict still
+     * REFUSES the submission — single-use enforcement is not
+     * negotiable — but only a genuine replay is punished.
      */
-    public function consume(string $token, string $nonce, ?int $now = null): bool
+    public function consume(string $token, string $nonce, ?int $now = null): string
     {
         $now = $now ?? time();
         $this->ensureDir();
-        $this->pruneIfStale($now);
 
         $key  = substr(hash('sha256', $token . "\0" . $nonce), 0, 32);
         $path = $this->dir . '/' . $key;
@@ -52,57 +76,41 @@ final class CaptchaStore
         // Atomic create-only — succeeds exactly once per (token, nonce).
         $fh = @fopen($path, 'x');
         if ($fh === false) {
-            // File already exists → replay (or, vanishingly rare, hash
-            // prefix collision; either way reject is the safe default).
-            return false;
+            // Tell "the marker is already there" apart from "we could
+            // not create it". What actually lands in the second case:
+            // EDQUOT, EMFILE/ENFILE, EROFS, EACCES, ENOENT (the dir
+            // vanished after ensureDir), open_basedir, and ENOSPC when
+            // even the metadata write fails. NOT the plain out-of-space
+            // case: with free inodes the create succeeds and only the
+            // fwrite below fails, leaving a zero-byte marker — harmless,
+            // because single-use enforcement reads existence, not size.
+            //
+            // If the retention sweeper removes the marker between the
+            // failed fopen and this check, the verdict is UNAVAILABLE
+            // rather than REPLAY. That is the harmless direction: the
+            // submission is refused either way, only the punishment is
+            // withheld.
+            if (is_file($path)) {
+                // Existing marker → replay (or, vanishingly rare, a hash
+                // prefix collision; either way refusing is correct).
+                return self::REPLAY;
+            }
+            // Logged HERE, not at the call site: `@fopen` swallowed the
+            // warning, and error_get_last() is only trustworthy right
+            // after it. The controller knows neither path nor errno.
+            // Error level because log_level ships as 'error' and this is
+            // the one case in this class an operator must actually see.
+            $err = error_get_last();
+            Log::error('CaptchaStore: cannot record single-use marker', [
+                'path'   => $path,
+                'reason' => is_array($err) ? (string)($err['message'] ?? '') : '',
+            ]);
+            return self::UNAVAILABLE;
         }
         @fwrite($fh, (string)$now);
         @fclose($fh);
         @chmod($path, 0600);
-        return true;
-    }
-
-    /**
-     * Run a prune pass at most once per minute (or per max_age if that's
-     * shorter). The marker file's mtime gates the rate; touching it
-     * resets the next allowed prune time.
-     */
-    private function pruneIfStale(int $now): void
-    {
-        $marker = $this->dir . '/.last-prune';
-        $interval = min(60, $this->maxAge);
-        $last = is_file($marker) ? (int)@filemtime($marker) : 0;
-        if ($now - $last < $interval) {
-            return;
-        }
-        // Touch first so concurrent requests bail out of pruning.
-        @touch($marker, $now);
-        @chmod($marker, 0600);
-        $this->prune($now);
-    }
-
-    /**
-     * Drop entries whose mtime is older than maxAge. The store contains
-     * only (hash → timestamp) pairs so a flat scandir is cheap enough
-     * for the volumes this site sees.
-     */
-    private function prune(int $now): void
-    {
-        $entries = @scandir($this->dir);
-        if ($entries === false) {
-            return;
-        }
-        $cutoff = $now - $this->maxAge;
-        foreach ($entries as $name) {
-            if ($name === '.' || $name === '..' || $name === '.last-prune') {
-                continue;
-            }
-            $path = $this->dir . '/' . $name;
-            $mtime = @filemtime($path);
-            if ($mtime !== false && $mtime < $cutoff) {
-                @unlink($path);
-            }
-        }
+        return self::CONSUMED;
     }
 
     private function ensureDir(): void

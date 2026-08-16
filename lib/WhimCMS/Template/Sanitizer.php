@@ -30,6 +30,17 @@ final class Sanitizer
      * input was attacker-controlled: tags are restored from sentinel
      * markers placed before the escape pass, so any "<em" with attributes,
      * "<EM>", or other variants get fully escaped.
+     *
+     * Precisely about the sentinel, because nothing proves it cannot
+     * occur in the input: a string that ALREADY contains the marker
+     * bytes survives htmlspecialchars untouched and comes out the far
+     * side as a real <em>. That is the whole extent of it — the
+     * replacement is a fixed, attribute-free literal, so the worst
+     * outcome is a stray emphasis tag. No attribute, no URL, no script,
+     * therefore no XSS primitive. Reviewed 2026-08-13 and deliberately
+     * left as is; a "safer" sentinel would add moving parts without
+     * removing a risk. What WOULD matter is the replacement growing to
+     * anything that can carry an attribute — do not extend this list.
      */
     public static function sanitizeEm(string $s): string
     {

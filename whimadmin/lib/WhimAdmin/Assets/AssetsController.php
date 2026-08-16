@@ -158,10 +158,22 @@ final class AssetsController
             'AUTHED_USER' => $this->username,
             'CSRF_LOGOUT' => $this->csrf->issue('logout'),
             'CSRF'        => $this->csrf->issue(self::FORM_ID),
-            'ENTRIES'     => array_map(fn($e) => $e + [
-                'size_human' => self::humanSize($e['size']),
-                'mtime_human' => $e['mtime'] === 0 ? '' : gmdate('Y-m-d H:i', $e['mtime']),
-            ], $entries),
+            // deletedAt is the raw "Y-m-d_His" stamp from the filename —
+            // humanised the same way PagesController does it for the page
+            // recycler, no DateTime involved. An entry without a stamp
+            // shows a dash, not an empty cell: those are precisely the
+            // ones the retention sweep will never remove, so the screen
+            // should not make them look ordinary.
+            'ENTRIES'     => array_map(static function (array $e): array {
+                $human = '—';
+                if (preg_match('/^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})$/', $e['deletedAt'], $m) === 1) {
+                    $human = "{$m[1]}-{$m[2]}-{$m[3]} {$m[4]}:{$m[5]}";
+                }
+                return $e + [
+                    'size_human'    => self::humanSize($e['size']),
+                    'deleted_human' => $human,
+                ];
+            }, $entries),
             'NOTICE'      => $req->query('purged') ? 'Recycler emptied.' : '',
         ]));
     }

@@ -67,9 +67,10 @@ declare(strict_types=1);
  *   cropped_cache_sweep_interval  Sweep interval (seconds) for
  *                                 `/cache/img-cropped/`. Sentinel-gated;
  *                                 runs at most once per interval per
- *                                 cache. Floors at 60 s. Triggered
- *                                 after each cache write the directive
- *                                 performs.
+ *                                 cache. Floors at 60 s. Triggered by
+ *                                 the kernel's Maintenance\Coordinator
+ *                                 at end of request (the directive no
+ *                                 longer triggers it on cache writes).
  *
  * The on-disk cache lives at `<paths.var>/cache/img-cropped/` and is
  * not configurable — runtime state belongs under paths.var, like

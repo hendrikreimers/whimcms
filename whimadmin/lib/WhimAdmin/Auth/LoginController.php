@@ -20,11 +20,26 @@ use H42\WhimCMS\Security\RateLimiter;
  *   3. Mail the code via OtpMailer.
  *   4. Redirect to /otp.
  *
- * On any failure (rate-limit hit, CSRF invalid, credentials wrong,
- * mail send failed) the response is a uniform 401-equivalent
- * re-render with a generic "Invalid credentials." error — no path
- * for user enumeration, no signal of "user exists but password
- * wrong vs user doesn't exist".
+ * Failure responses are NOT uniform. Four distinct outcomes:
+ *
+ *   429  rate limit hit          ("Too many attempts…")
+ *   400  CSRF invalid/expired    ("Form expired…")
+ *   401  credentials wrong       ("Invalid credentials.")
+ *   503  OTP mail delivery failed ("Could not deliver login code…")
+ *
+ * The 401 branch does hold the enumeration guarantee: "user exists but
+ * password wrong" and "user does not exist" are indistinguishable.
+ *
+ * ⚠️ The 503 branch does NOT. It is reached only AFTER UserStore::verify
+ * returned a user and after `login.password.ok` was audited — so a 503
+ * confirms that the submitted credentials were valid. An attacker who
+ * can provoke mail-delivery failure therefore has a credential oracle.
+ * Whether that is acceptable is an open question, deliberately recorded
+ * rather than papered over; see the R6 entry in
+ * `_docs/audits/2026-08-13_core-review-five-perspectives.md`.
+ *
+ * This docblock previously claimed a "uniform 401-equivalent" response
+ * with "no path for user enumeration". That was untrue on both counts.
  *
  * The rate limit applies per-IP across the login flow (login attempts
  * + OTP attempts share the same bucket through OtpController). 5

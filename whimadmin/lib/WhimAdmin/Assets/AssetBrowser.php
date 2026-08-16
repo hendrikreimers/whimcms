@@ -12,6 +12,7 @@ namespace H42\WhimAdmin\Assets;
  *   rename(path, newName)   rename a file or directory
  *   recycle(path)           move file/dir to <assets>/.recycler/
  *   recyclerList()          listing of .recycler/
+ *   recyclerPurgeOlderThan(days)  retention sweep over .recycler/
  *   recyclerPurge()         empty .recycler/ (manual operator action)
  *
  * Every public method validates path components against a tight regex
@@ -33,6 +34,16 @@ final class AssetBrowser
 {
     private const RECYCLER_DIR = '.recycler';
     private const NAME_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/';
+
+    /**
+     * Deletion-time stamp baked into recycler filenames by recycle().
+     * ONE constant for the writer and both readers on purpose: the
+     * retention sweep judges names against it, and a format that
+     * drifted away from its own parser would silently stop deleting.
+     * Same value as `Content\Recycler::TS_FORMAT` so both recyclers
+     * remain readable side by side.
+     */
+    private const TS_FORMAT = 'Y-m-d_His';
 
     /**
      * Extensions accepted for upload AND surfaced in the image-field
@@ -274,7 +285,7 @@ final class AssetBrowser
         // Encode the original path into the recycler filename so
         // restore (later phase) can reverse it.
         $orig = preg_replace('/[^A-Za-z0-9._-]/', '_', $path) ?? 'unknown';
-        $base = $orig . '__' . gmdate('Y-m-d_His');
+        $base = $orig . '__' . gmdate(self::TS_FORMAT);
         $ext  = is_dir($abs) ? '' : ('.' . strtolower((string)pathinfo($abs, PATHINFO_EXTENSION)));
         $target = $recDir . DIRECTORY_SEPARATOR . $base . $ext;
         if (file_exists($target)) {
@@ -286,7 +297,14 @@ final class AssetBrowser
     }
 
     /**
-     * @return list<array{name:string, type:string, size:int, mtime:int}>
+     * `deletedAt` is the raw `Y-m-d_His` stamp recycle() encoded into
+     * the filename, or `''` when the entry carries none — same field
+     * name, same type and same semantics as `Content\Recycler::list()`,
+     * so both recycler screens stay comparable. Deliberately NOT the
+     * file mtime: rename() preserves it, so it says "last modified",
+     * not "deleted" (see recyclerPurgeOlderThan).
+     *
+     * @return list<array{name:string, type:string, size:int, deletedAt:string}>
      */
     public function recyclerList(): array
     {
@@ -300,24 +318,43 @@ final class AssetBrowser
             if (!is_string($name) || $name === '.' || $name === '..' || $name === '.htaccess') continue;
             $full = $real . DIRECTORY_SEPARATOR . $name;
             $out[] = [
-                'name'  => $name,
-                'type'  => is_dir($full) ? 'dir' : 'file',
-                'size'  => is_file($full) ? (int)@filesize($full) : 0,
-                'mtime' => (int)(@filemtime($full) ?: 0),
+                'name'      => $name,
+                'type'      => is_dir($full) ? 'dir' : 'file',
+                'size'      => is_file($full) ? (int)@filesize($full) : 0,
+                'deletedAt' => self::deletedAtFromName($name) ?? '',
             ];
         }
-        usort($out, static fn(array $a, array $b) => $b['mtime'] <=> $a['mtime']);
+        // Newest first. Lexical compare is correct on Y-m-d_His
+        // (zero-padded, big-endian). Entries without a stamp sort last,
+        // which is where they belong: they are exactly the ones the
+        // retention sweep will never touch.
+        usort($out, static fn(array $a, array $b) => strcmp($b['deletedAt'], $a['deletedAt']));
         return $out;
     }
 
     /**
-     * Drop recycler entries whose mtime is older than `$days` days.
+     * Drop recycler entries deleted more than `$days` days ago.
      * Used by the backend-access sweeper. Returns count removed.
      *
-     * Recycler files are originally `rename`d in (preserving the
-     * source's mtime), so an item's mtime equals its original
-     * last-modification — close enough to "deleted at" for the
-     * purpose of an auto-sweep cutoff.
+     * The cutoff reads the timestamp recycle() encodes into the
+     * FILENAME. It used to read filemtime(), and that was wrong in the
+     * ordinary case: entries arrive by rename(), which PRESERVES the
+     * source's mtime, so the retention clock ran from "last modified"
+     * instead of "deleted". Anything older than $days at the moment of
+     * deletion was therefore purged on the very next sweep — for an
+     * image archive that meant every existing photo was gone after one
+     * misclick, with no grace period at all. No attacker required.
+     *
+     * Entries whose name carries no parsable stamp are NEVER removed
+     * here. They cannot come from recycle(); this class contemplates
+     * SFTP access (see the class docblock) and editor/kernel artefacts
+     * (.DS_Store, .nfs*) land here too. Their mtime would in fact be a
+     * truthful arrival time — but relying on it would mean that any
+     * future drift between the naming scheme and the parser silently
+     * restores the old bug for EVERY file. Refusing to date them fails
+     * the other way: nothing gets deleted, which is visible and
+     * harmless, and the manual recyclerPurge() clears them. Same
+     * posture as Content\Recycler::purgeOlderThan().
      */
     public function recyclerPurgeOlderThan(int $days): int
     {
@@ -329,7 +366,7 @@ final class AssetBrowser
         $real = realpath($recDir);
         if ($real === false) return 0;
         $this->assertContained($real);
-        $cutoff = time() - ($days * 86400);
+        $cutoff = gmdate(self::TS_FORMAT, time() - ($days * 86400));
         $count = 0;
         foreach ((array)@scandir($real) as $name) {
             if (!is_string($name) || $name === '.' || $name === '..' || $name === '.htaccess') continue;
@@ -337,8 +374,11 @@ final class AssetBrowser
             $rp = realpath($path);
             if ($rp === false) continue;
             if (!str_starts_with($rp, $real . DIRECTORY_SEPARATOR)) continue;
-            $mtime = @filemtime($rp);
-            if ($mtime === false || $mtime > $cutoff) continue;
+            $deletedAt = self::deletedAtFromName($name);
+            if ($deletedAt === null) continue;
+            // Lexical compare on Y-m-d_His is correct because the
+            // format is zero-padded and big-endian.
+            if (strcmp($deletedAt, $cutoff) > 0) continue;
             if (is_dir($rp)) {
                 if ($this->rmRecursive($rp)) $count++;
             } else {
@@ -346,6 +386,36 @@ final class AssetBrowser
             }
         }
         return $count;
+    }
+
+    /**
+     * The deletion stamp recycle() wrote into `$name`, or null when the
+     * name carries none.
+     *
+     * Shape produced by recycle(): `<sanitised-original>__<Y-m-d_His>`,
+     * optionally followed by `_<4 hex>` on a name collision and by
+     * `.<ext>`. Directories carry no extension; a source file without
+     * an extension leaves a bare trailing dot. The pattern is anchored
+     * at the END because the sanitised original may itself contain
+     * `__`, digits, or something that looks like a stamp — only the
+     * trailing one was written by us.
+     *
+     * Returned raw rather than as a unix time: the retention sweep
+     * compares it lexically (valid for a zero-padded big-endian
+     * format), and the UI formats it with a regex, exactly like
+     * `Content\Recycler` / `PagesController::recyclerView()`. No
+     * DateTime parsing means no second failure mode.
+     */
+    private static function deletedAtFromName(string $name): ?string
+    {
+        if (preg_match(
+            '/__(\d{4}-\d{2}-\d{2}_\d{6})(?:_[0-9a-f]{4})?(?:\.[^.]*)?$/',
+            $name,
+            $m
+        ) !== 1) {
+            return null;
+        }
+        return $m[1];
     }
 
     public function recyclerPurge(): int

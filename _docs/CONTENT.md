@@ -395,7 +395,7 @@ or any chrome string even by writing the key. Default:
 
 ```php
 'i18n_overlay' => [
-    'allowed_sections' => ['nav', 'footer'],
+    'allowed_sections' => ['navigation'],
 ],
 ```
 

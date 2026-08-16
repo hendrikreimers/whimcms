@@ -10,7 +10,11 @@ use H42\WhimCMS\Frontend\ContactPostHandler;
 use H42\WhimCMS\Frontend\LanguageDetector;
 use H42\WhimCMS\Frontend\PageRenderer;
 use H42\WhimCMS\Http\Responder;
+use H42\WhimCMS\Image\CroppedCacheSweeper;
 use H42\WhimCMS\Image\CroppedServer;
+use H42\WhimCMS\Maintenance\Coordinator;
+use H42\WhimCMS\Maintenance\DayDirSweeper;
+use H42\WhimCMS\Maintenance\TtlFileSweeper;
 use H42\WhimCMS\Path\PathResolver;
 use H42\WhimCMS\Security\Http\RequestSecurity;
 use H42\WhimCMS\Security\Secret;
@@ -182,9 +186,10 @@ final class Kernel
         $secret = Secret::load($this->stateDir);
 
         // Cache sweeper for var/cache/content. Sentinel-gated; runs at
-        // most once per configured interval. Triggered from PageLoader
-        // after a successful cache-write. Failure is non-fatal: any
-        // sweep error is logged and never propagates to the render path.
+        // most once per configured interval, triggered end-of-request
+        // by the Maintenance\Coordinator below (the old PageLoader
+        // cache-write trigger never fired on a warm cache). Failure is
+        // non-fatal: logged, never propagates to the render path.
         $contentCacheDir = $this->paths['var'] . '/cache/content';
         $contentSweeper = new ContentCacheSweeper(
             $contentCacheDir,
@@ -201,8 +206,149 @@ final class Kernel
             $secret,
             $maxBytes,
             $this->allowedLayouts,
-            $contentSweeper,
         );
+
+        $this->bootstrapMaintenance($contentSweeper);
+    }
+
+    /**
+     * Wire the maintenance Coordinator: every retention sweeper of this
+     * kernel, triggered once per request via a shutdown hook (covers
+     * the exit paths a call at the end of dispatch() would miss; under
+     * FPM the response is handed off first, so visitors never wait).
+     *
+     * Retention values are DERIVED from the existing config windows —
+     * no second source of truth, no new config keys. The mtime
+     * argument that makes each TTL safe: the writers rewrite their
+     * file on every hit, so once `now − mtime > window` every entry
+     * inside is provably expired. The margin absorbs clock skew.
+     *
+     * `photoshare/var/` is deliberately NOT on this list and must not
+     * be added: it holds consent evidence whose retention is a legal
+     * question, not a hygiene question.
+     */
+    private function bootstrapMaintenance(ContentCacheSweeper $contentSweeper): void
+    {
+        // ORDER GUARD: this must stay AFTER installErrorHandlers().
+        // Shutdown handlers run in registration order — the
+        // ErrorHandler's fatal handler has to emit its 500 page BEFORE
+        // the Coordinator hook calls fastcgi_finish_request(), or a
+        // fatal request would be flushed to the client with no body.
+        //
+        // Hourly consideration for the state-file sweepers: the
+        // deletion cap is per RUN, so the drain rate is cap × runs/day
+        // per store (500 × 24 = 12 000/day). A daily interval would
+        // cap drainage at 500/day — under a distributed flood with
+        // >500 fresh /64 sources a day the store would grow faster
+        // than it shrinks (review finding W0-A3). Cost is unchanged:
+        // one filemtime check per sweeper per request.
+        $interval = 3600;
+        // The mail-log day-dir sweeper keeps a daily pace — it deletes
+        // at most a handful of directories, one per calendar day.
+        $dayDirInterval = 86400;
+
+        $imgCfg = (array)Config::get('images', []);
+        $croppedSweeper = new CroppedCacheSweeper(
+            $this->paths['var'] . '/cache/img-cropped',
+            $this->stateDir . '/.cache-sweep-img-cropped',
+            (int)($imgCfg['cropped_cache_sweep_interval'] ?? 86400),
+            $this->rootDir,
+            (int)($imgCfg['cropped_cache_max_age'] ?? 30 * 86400),
+        );
+
+        // Margin added onto each functional window before a state file
+        // may be deleted. One hour absorbs any realistic clock skew.
+        $margin = 3600;
+
+        $rateWindow  = (int)Config::get('rate_limit.window_seconds', 600);
+        $missWindow  = (int)Config::get('captcha.miss_window', 1800);
+        $captchaAge  = (int)Config::get('captcha.max_age', 7200);
+        // Day-keyed counter files: yesterday's file is never read again;
+        // 8 days keeps a week of operational visibility. Constant on
+        // purpose — not worth a config key.
+        $counterTtl  = 8 * 86400;
+        $mailLogDays = (int)Config::get('mail.log_retention_days', 30);
+        // blocklist.json prunes itself — but only inside strike().
+        // isBlocked() prunes read-only (Blocklist::readPruned), so once
+        // a burst stops the file keeps its high-water mark until some
+        // later strike rewrites it; on a quiet site that is months, and
+        // every contact POST re-reads and re-decodes entries that are
+        // by then all expired. The TTL argument needs one term more
+        // than the stores above: a block entry stores
+        // `now + block_duration`, a timestamp in the FUTURE relative to
+        // mtime, so the TTL has to clear max(fail_window,
+        // block_duration) — the window alone is not enough. Both
+        // fallbacks mirror ContactController::fromConfig, which in turn
+        // mirrors the shipped config/security.php (1800 / 900). Note the
+        // max() makes the block_duration fallback inert: fail_window
+        // already dominates at 1800. It is kept aligned anyway so the
+        // next reader does not take a divergence for intent.
+        $blockTtl    = max(
+            (int)Config::get('blocklist.fail_window', 1800),
+            (int)Config::get('blocklist.block_duration', 900),
+        );
+
+        $keyHash = '/^[a-f0-9]{32}\.json$/';
+
+        $coordinator = new Coordinator(
+            $contentSweeper,
+            $croppedSweeper,
+            new TtlFileSweeper(
+                $this->stateDir . '/ratelimit',
+                $this->stateDir . '/.sweep-ratelimit',
+                $interval,
+                $this->rootDir,
+                $keyHash,
+                $rateWindow + $margin,
+            ),
+            new TtlFileSweeper(
+                $this->stateDir . '/captcha-miss',
+                $this->stateDir . '/.sweep-captcha-miss',
+                $interval,
+                $this->rootDir,
+                $keyHash,
+                $missWindow + $margin,
+            ),
+            new TtlFileSweeper(
+                $this->stateDir . '/captcha-used',
+                $this->stateDir . '/.sweep-captcha-used',
+                $interval,
+                $this->rootDir,
+                '/^[a-f0-9]{32}$/',
+                $captchaAge + $margin,
+            ),
+            new TtlFileSweeper(
+                $this->stateDir . '/mail-counter',
+                $this->stateDir . '/.sweep-mail-counter',
+                $interval,
+                $this->rootDir,
+                '/^\d{4}-\d{2}-\d{2}\.txt$/',
+                $counterTtl,
+            ),
+            // Unlike every sweeper above, this one is pointed at
+            // var/state ITSELF — blocklist.json is a single file, not a
+            // store directory. What keeps that safe is the allowlist
+            // regex alone: `secret`, `.secret.lock` and all sentinels
+            // live in this directory too. Never loosen the pattern —
+            // deleting `secret` would rotate every CSRF token, every
+            // throttle bucket and the honeypot field name in one go.
+            new TtlFileSweeper(
+                $this->stateDir,
+                $this->stateDir . '/.sweep-blocklist',
+                $interval,
+                $this->rootDir,
+                '/^blocklist\.json$/',
+                $blockTtl + $margin,
+            ),
+            new DayDirSweeper(
+                $this->stateDir . '/mail-log',
+                $this->stateDir . '/.sweep-mail-log',
+                $dayDirInterval,
+                $this->rootDir,
+                $mailLogDays,
+            ),
+        );
+        $coordinator->registerShutdownHook();
     }
 
     private function installErrorHandlers(): void
@@ -239,7 +385,17 @@ final class Kernel
             Robots::send($basePath, $this->paths['content']);
             return;
         }
-        if ($path === 'sitemap.xml') {
+        // sitemap.xml — gated on seo.indexable for the same reason as
+        // llms.txt below: a non-indexable site must not advertise its
+        // page list. Without this gate the endpoint was the odd one out
+        // in its own family — robots.txt answers a bare `Disallow: /`
+        // and never reaches its `Sitemap:` line (Seo\Robots), llms.txt
+        // 404s, and sitemap.xml happily published every URL anyway.
+        // Falls through to normal routing when disabled, which resolves
+        // to a 404 (no supported language matches "sitemap.xml", and no
+        // route is registered for it). No dangling reference is created:
+        // the non-indexable robots.txt does not point at the sitemap.
+        if ($path === 'sitemap.xml' && (bool)Config::get('seo.indexable', false)) {
             Sitemap::send($basePath, $this->pageLoader, $this->singleLang);
             return;
         }

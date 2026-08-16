@@ -391,17 +391,32 @@ Both bypass the default escape, but for different inputs:
   `</em>` is escaped to text.
 - `{% html: expr %}` — emits verbatim with **no** post-processing.
   Use **only** on values produced by trusted server-side rendering
-  with its own allowlist. The legitimate callers today are all
-  `{% html: body %}` invocations in block partials whose `body`
-  comes from `H42\WhimCMS\Content\Markdown::render()` (the safe
-  Markdown subset): `partials/blocks/legal-section.html`,
-  `partials/blocks/prose.html`, `partials/blocks/code-snippet.html`.
+  with its own allowlist. **Two** legitimate sources today:
+
+  1. **Markdown block bodies** — `{% html: body %}` in block partials
+     whose `body` comes from `H42\WhimCMS\Content\Markdown::render()`
+     (the safe Markdown subset): `partials/blocks/legal-section.html`,
+     `partials/blocks/prose.html`, `partials/blocks/code-snippet.html`.
+  2. **`{% html: SEO.ldJson %}`** in the layouts, inside
+     `<script type="application/ld+json">`. Added 2026-08-16. The value
+     is built by `H42\WhimCMS\Seo\PageSeo::buildLdJson()` from
+     `config/seo.php` and encoded with `JSON_HEX_TAG | JSON_HEX_AMP |
+     JSON_HEX_APOS | JSON_HEX_QUOT`, so it can contain no literal `<`
+     and cannot escape the script element whatever an operator writes
+     in the config. Malformed UTF-8 degrades to `{}`.
+
+  ⚠️ **`{!! !!}` is not an alternative here.** It escapes, including the
+  JSON's structural quotes, and entities are not decoded inside
+  `<script>` — the result is invalid JSON-LD that every consumer ignores
+  without an error. The bundled layouts shipped exactly that bug until
+  2026-08-16.
+
   Audit grep:
   ```
   grep -rn "% html:" templates/
   ```
-  Every match must trace to a value that went through
-  `Markdown::render()`. New uses require review.
+  Every match must trace to one of the two sources above. New uses
+  require review — this list grew once and should not grow casually.
 
 ## Expression sub-language
 

@@ -34,7 +34,10 @@ return [
         'daily_max'                   => 200,      // hard cap to protect host quotas
 
         /**
-         * Audit log of every send attempt — date-bucketed, auto-pruned.
+         * Audit log of every send attempt — date-bucketed. Retention
+         * is enforced by the kernel's maintenance sweeper against
+         * `log_retention_days`, independent of `log_enabled` — turning
+         * the log OFF does not freeze the existing records.
          * Body is omitted by default for privacy.
          *
          * OFF by default. Turning it ON makes the log record the

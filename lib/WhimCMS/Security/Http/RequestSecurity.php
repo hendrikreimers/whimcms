@@ -5,6 +5,7 @@ namespace H42\WhimCMS\Security\Http;
 
 use H42\WhimCMS\Config;
 use H42\WhimCMS\Http\Responder;
+use H42\WhimCMS\Log;
 use H42\WhimCMS\Security\Form\Csrf;
 
 /**
@@ -36,6 +37,10 @@ final class RequestSecurity
      * `REQUEST_URI` and `SCRIPT_NAME`. A NUL/CR/LF in either would
      * otherwise risk header-splitting, log-injection, or path-parser
      * confusion downstream.
+     *
+     * Second rejection: a scheme-relative request target. This is the
+     * INBOUND counterpart to `Responder::isSafeRedirectTarget()` — the
+     * same two characters, the other direction. Rationale in the body.
      */
     public static function rejectUnsafeRequest(string $rawUri, string $scriptName): void
     {
@@ -44,6 +49,42 @@ final class RequestSecurity
                 Responder::plain(400, '400 — Bad Request');
                 exit;
             }
+        }
+
+        // A request target starting with `//` (or `/\`) makes Apache and
+        // PHP resolve DIFFERENT paths for one request.
+        //
+        // `Router::stripBase` derives the path with
+        // `parse_url($uri, PHP_URL_PATH)` (Router.php:55, there to strip
+        // the query string and fragment). Per RFC 3986 §4.2 a leading
+        // `//` introduces an AUTHORITY, so parse_url discards the first
+        // segment: `//anything/de/contact` becomes `/de/contact`. Apache
+        // meanwhile still sees `//anything/…`, so every Apache rule
+        // anchored on `^/<path>` stops matching — while the front
+        // controller happily serves the page.
+        //
+        // In this deployment that defeated the HTTP Basic-Auth gate in
+        // front of the internal catalogue, which is the project's only
+        // authorisation decision bound to a URI pattern rather than to a
+        // directory. Confirmed on the running site, 2026-08-13; see
+        // `_docs/audits/2026-08-13_core-review-five-perspectives.md`, R1.
+        //
+        // Deliberately NARROW — only a LEADING `//` or `/\`. Not "must
+        // begin with exactly one slash": that would also turn
+        // `OPTIONS *` and an empty REQUEST_URI into 400s, both of which
+        // are refused anyway today, for no gain. A double slash INSIDE
+        // the path is untouched and needs no guard (`/de//contact`
+        // resolves to nothing and 404s on its own).
+        //
+        // No legitimate client sends this for our host: `//host/path` is
+        // a protocol-relative reference and addresses a DIFFERENT host,
+        // so a browser resolving it never reaches us at all.
+        if (isset($rawUri[1]) && $rawUri[0] === '/' && ($rawUri[1] === '/' || $rawUri[1] === '\\')) {
+            Log::warn('RequestSecurity: rejected scheme-relative request target', [
+                'uri_prefix' => substr($rawUri, 0, 64),
+            ]);
+            Responder::plain(400, '400 — Bad Request');
+            exit;
         }
     }
 

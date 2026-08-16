@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace H42\WhimCMS\Security;
 
+use H42\WhimCMS\Io\FileRewrite;
 use H42\WhimCMS\Log;
 
 /**
@@ -11,9 +12,12 @@ use H42\WhimCMS\Log;
  *   Storage:  var/state/ratelimit/<keyhash>.json
  *   Content:  list of unix timestamps, oldest first.
  *
- * The IP is hashed (HMAC-SHA-256, keyed with the application secret) so
- * the on-disk identifier can't be reversed to an IP — useful both for
+ * The bucket key comes from `ThrottleKey::derive()`: the client is first
+ * reduced to the unit that gets one counter (IPv6 → its /64 network,
+ * IPv4 unchanged), then hashed (HMAC-SHA-256, keyed with the application
+ * secret) so the on-disk identifier can't be reversed — useful both for
  * privacy and to avoid leaking visitor IPs if the file ever escapes.
+ * Why a network and not an address: see `ThrottleKey`.
  *
  * On every check, expired entries (older than $window) are pruned, so
  * the file size stays bounded by the allowed rate.
@@ -67,9 +71,17 @@ final class RateLimiter
             return false;
         }
         try {
-            flock($fh, LOCK_EX);
+            // A lock that cannot be acquired (NFS without lockd, signal,
+            // resource exhaustion) would silently unprotect the whole
+            // read-modify-write — parallel hits could then exceed the
+            // window cap. Same closed posture as every other error here.
+            if (!flock($fh, LOCK_EX)) {
+                Log::error('RateLimiter: cannot acquire lock; failing closed', ['path' => $path]);
+                return false;
+            }
             rewind($fh);
             $raw = stream_get_contents($fh);
+            $raw = $raw === false ? '' : $raw;
             $entries = $this->decode($raw);
 
             // Drop expired.
@@ -81,17 +93,19 @@ final class RateLimiter
                 $entries[] = $now;
             }
 
-            // Persist via ftruncate+fwrite on the held fh — keeps the
-            // LOCK_EX anchored to the same inode for the full read-
-            // modify-write. tmpfile+rename would atomically replace the
-            // inode and leave any concurrent worker's flock pointing at
-            // the now-orphaned old inode, producing lost-update races
-            // (parallel hits past the window cap, missed strikes, etc.)
+            // Persist on the held fh — keeps the LOCK_EX anchored to
+            // the same inode for the full read-modify-write (tmpfile+
+            // rename would orphan concurrent lockers; see FileRewrite).
+            // The rewrite is verified: on a short write (disk full,
+            // quota) the previous window is restored instead of the
+            // old truncate-first behaviour, which silently reset the
+            // counter to zero. Failing the rewrite fails the request —
+            // same closed posture as every other error in this class.
             $payload = json_encode($entries, JSON_UNESCAPED_SLASHES) ?: '[]';
-            ftruncate($fh, 0);
-            rewind($fh);
-            fwrite($fh, $payload);
-            fflush($fh);
+            if (!FileRewrite::replace($fh, $payload, $raw)) {
+                Log::error('RateLimiter: state rewrite failed; failing closed, previous window kept', ['path' => $path]);
+                return false;
+            }
             @chmod($path, 0o600);
             return $allowed;
         } finally {
@@ -119,8 +133,7 @@ final class RateLimiter
 
     private function pathFor(string $ip): string
     {
-        $key = hash_hmac('sha256', $ip, $this->secret);
-        return $this->dir . '/' . substr($key, 0, 32) . '.json';
+        return $this->dir . '/' . ThrottleKey::derive($ip, $this->secret) . '.json';
     }
 
     private function ensureDir(): void

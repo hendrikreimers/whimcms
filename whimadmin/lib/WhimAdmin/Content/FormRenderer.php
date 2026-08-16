@@ -142,6 +142,24 @@ final class FormRenderer
 
     private function renderSelect(string $path, string $value, FieldSchema $field, string $label): string
     {
+        // Apply the schema default before building the options.
+        //
+        // A newly created block arrives with EMPTY attrs, so without this
+        // no option carries `selected` and the browser silently picks the
+        // FIRST one in the markup — a plausible-looking wrong value that
+        // then saves as if the operator had chosen it. That is how a
+        // freshly added camp card ended up as "live" instead of the
+        // declared default "soon", with outward effect on the public page.
+        //
+        // `renderNumber` has always honoured `default` (see above); the
+        // select was simply never given the same treatment, while
+        // BLOCK_SCHEMAS.md documents `default` as valid for both. A
+        // default that is not among `options` selects nothing — exactly
+        // the behaviour before this change. Blocks that already carry a
+        // stored value are untouched.
+        if ($value === '') {
+            $value = (string)($field->get('default') ?? '');
+        }
         $options = (array)($field->get('options') ?? []);
         $rendered = [];
         foreach ($options as $opt) {
